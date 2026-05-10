@@ -11,6 +11,8 @@ Install `legacy-impact-audit` for the current agent or for the target project, v
 - Do not modify unrelated repository files.
 - Do not install hooks unless the user explicitly asks for hook enforcement.
 - Do not call an LLM from installation scripts. The scripts are deterministic.
+- Python is optional for installation. If Python is unavailable, use `portable/install-kit.sh`, `portable/install-kit.ps1`, or manual copy from `NO-PYTHON-INSTALL.md`.
+- Python is required for audit execution, smoke tests, and gate validation. If unavailable, install only and report skipped runtime validation.
 - Prefer project-scope install when the user wants a repository to enforce the audit gate for multiple agents.
 - Prefer user-scope install when the user wants the current machine/account to use the skill globally.
 
@@ -23,6 +25,8 @@ test -f legacy-impact-audit/SKILL.md
 test -f legacy-impact-audit/scripts/impact_audit.py
 test -f legacy-impact-audit/scripts/validate_impact_audit.py
 test -f portable/install-kit.py
+test -f portable/install-kit.sh
+test -f portable/install-kit.ps1
 ```
 
 If the files are missing, stop and report that the repository is not a valid `legacy-impact-audit` kit.
@@ -58,10 +62,32 @@ Use user scope for global local usage:
 python3 portable/install-kit.py --agent AGENT --scope user --force
 ```
 
+If Python is unavailable, use the shell installer:
+
+```bash
+sh portable/install-kit.sh --agent AGENT --scope user --force
+```
+
+On Windows without Python, use PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File portable/install-kit.ps1 -Agent AGENT -Scope user -Force
+```
+
 Use project scope when installing into a target repository:
 
 ```bash
 python3 portable/install-kit.py \
+  --agent AGENT \
+  --scope project \
+  --project-root /path/to/target/repo \
+  --force
+```
+
+No-Python project install:
+
+```bash
+sh portable/install-kit.sh \
   --agent AGENT \
   --scope project \
   --project-root /path/to/target/repo \
@@ -86,6 +112,12 @@ python3 portable/install-kit.py \
 
 ## Step 4: Validate
 
+If Python is unavailable, skip this step and report:
+
+```text
+Runtime validation skipped: Python 3 unavailable.
+```
+
 Run Python syntax checks:
 
 ```bash
@@ -105,6 +137,12 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_
 If the validator path does not exist, skip it and say so.
 
 ## Step 5: Smoke Test
+
+If Python is unavailable, skip this step and report:
+
+```text
+Audit smoke test skipped: Python 3 unavailable.
+```
 
 Run a deterministic scan against the kit itself:
 

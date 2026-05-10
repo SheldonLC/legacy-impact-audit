@@ -8,6 +8,16 @@ Codex uses this repository as a native skill.
 python3 portable/install-kit.py --agent codex --scope user --force
 ```
 
+No-Python install:
+
+```bash
+sh portable/install-kit.sh --agent codex --scope user --force
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File portable/install-kit.ps1 -Agent codex -Scope user -Force
+```
+
 Default destination:
 
 ```text
@@ -15,6 +25,8 @@ ${CODEX_HOME:-$HOME/.codex}/skills/legacy-impact-audit
 ```
 
 ## Validate
+
+Validation and audit execution require Python 3.
 
 ```bash
 test -f "${CODEX_HOME:-$HOME/.codex}/skills/legacy-impact-audit/SKILL.md"

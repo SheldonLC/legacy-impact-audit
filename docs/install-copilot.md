@@ -8,6 +8,16 @@ GitHub Copilot coding agent supports skills in repository/user skill locations. 
 python3 portable/install-kit.py --agent copilot --scope user --force
 ```
 
+No-Python install:
+
+```bash
+sh portable/install-kit.sh --agent copilot --scope user --force
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File portable/install-kit.ps1 -Agent copilot -Scope user -Force
+```
+
 Default destination:
 
 ```text
@@ -24,6 +34,16 @@ python3 portable/install-kit.py \
   --force
 ```
 
+No-Python project install:
+
+```bash
+sh portable/install-kit.sh \
+  --agent copilot \
+  --scope project \
+  --project-root /path/to/target/repo \
+  --force
+```
+
 Project install writes:
 
 ```text
@@ -32,6 +52,8 @@ Project install writes:
 ```
 
 The instructions file makes impact audit a mandatory planning/review gate for risky legacy Java changes.
+
+Running the audit scripts requires Python 3 and ripgrep.
 
 ## Sources
 

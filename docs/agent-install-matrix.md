@@ -15,6 +15,16 @@
 python3 portable/install-kit.py --agent all --scope user --force
 ```
 
+No-Python alternatives:
+
+```bash
+sh portable/install-kit.sh --agent all --scope user --force
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File portable/install-kit.ps1 -Agent all -Scope user -Force
+```
+
 ## Install A Project Adapter
 
 ```bash
@@ -26,3 +36,5 @@ python3 portable/install-kit.py \
 ```
 
 Use project adapters when a repository needs mandatory gate behavior for all coding agents.
+
+Python is optional for installation. Python 3 is still required to run `impact_audit.py` and `validate_impact_audit.py`.

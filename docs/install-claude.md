@@ -8,6 +8,16 @@ Claude Code supports Agent Skills with `SKILL.md` in user or project skill folde
 python3 portable/install-kit.py --agent claude --scope user --force
 ```
 
+No-Python install:
+
+```bash
+sh portable/install-kit.sh --agent claude --scope user --force
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File portable/install-kit.ps1 -Agent claude -Scope user -Force
+```
+
 Default destination:
 
 ```text
@@ -26,6 +36,16 @@ python3 portable/install-kit.py \
   --force
 ```
 
+No-Python project install:
+
+```bash
+sh portable/install-kit.sh \
+  --agent claude \
+  --scope project \
+  --project-root /path/to/target/repo \
+  --force
+```
+
 Project destination:
 
 ```text
@@ -37,6 +57,8 @@ Project destination:
 ```text
 Use $legacy-impact-audit to audit the impact of changing METHOD_NAME before editing.
 ```
+
+Running the audit scripts requires Python 3 and ripgrep.
 
 ## Source
 

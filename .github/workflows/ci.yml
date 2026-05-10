@@ -10,6 +10,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install skill with shell installer
+        run: |
+          sh portable/install-kit.sh --agent codex --skills-dir /tmp/codex-skills-sh --force
+          test -f /tmp/codex-skills-sh/legacy-impact-audit/SKILL.md
+          test -f /tmp/codex-skills-sh/legacy-impact-audit/scripts/impact_audit.py
+          test -f /tmp/codex-skills-sh/legacy-impact-audit/scripts/validate_impact_audit.py
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"

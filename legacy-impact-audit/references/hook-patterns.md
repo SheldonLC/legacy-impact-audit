@@ -37,6 +37,45 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/legacy-impact-audit/scripts/validate
 
 For repositories where semantic confirmation must be captured before review, add `--require-verdicts` and write `.ai/legacy-impact-audit/semantic-verdict.md` during the review/test-planning step.
 
+### Local sensitive-scan mode
+
+Use this when local commits and pushes must be blocked if staged files, commit messages, or pushed commits contain private terms, local paths, or internal project identifiers.
+
+Keep the pattern file local and untracked. Recommended location:
+
+```text
+.git/hooks/legacy-impact-audit-sensitive-patterns.txt
+```
+
+Example `.git/hooks/pre-commit`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+exec "$root/legacy-impact-audit/scripts/sensitive-scan-gate.sh" pre-commit "$@"
+```
+
+Example `.git/hooks/commit-msg`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+exec "$root/legacy-impact-audit/scripts/sensitive-scan-gate.sh" commit-msg "$@"
+```
+
+Example `.git/hooks/pre-push`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+exec "$root/legacy-impact-audit/scripts/sensitive-scan-gate.sh" pre-push "$@"
+```
+
+The hook prints only matched locations by default, not matched line contents. Set `LEGACY_IMPACT_AUDIT_SHOW_SENSITIVE_LINES=1` locally when exact matched lines are needed.
+
 ### Target-file mode
 
 Use this when teams want deterministic blocking on known risky methods. Keep `.ai/legacy-impact-audit/targets.json` in the repo:
@@ -62,5 +101,6 @@ A local hook can read the target file and run `impact_audit.py scan --fail-on-re
 - Keep hook runtime under a few seconds by narrowing root/module where possible.
 - Do not scan the whole monorepo for generic names like `execute` without owner class/package.
 - Prefer validation hooks over auto-scan hooks. Auto-scan hooks cannot know the correct owner class/package for legacy overloads.
+- Keep sensitive-scan pattern files outside tracked files unless the patterns are safe to publish.
 - Do not commit cache entries unless the team wants dependency verdicts shared.
 - Treat hook output as a safety net. The agent still owns semantic confirmation and test planning.

@@ -8,6 +8,16 @@ Gemini CLI primarily uses context files such as `GEMINI.md`. This repository ins
 python3 portable/install-kit.py --agent gemini --scope user --force
 ```
 
+No-Python install:
+
+```bash
+sh portable/install-kit.sh --agent gemini --scope user --force
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File portable/install-kit.ps1 -Agent gemini -Scope user -Force
+```
+
 This writes:
 
 ```text
@@ -25,6 +35,16 @@ python3 portable/install-kit.py \
   --force
 ```
 
+No-Python project install:
+
+```bash
+sh portable/install-kit.sh \
+  --agent gemini \
+  --scope project \
+  --project-root /path/to/target/repo \
+  --force
+```
+
 This writes:
 
 ```text
@@ -33,6 +53,8 @@ This writes:
 ```
 
 The `GEMINI.md` block is idempotent and tells Gemini to run `impact_audit.py` before risky legacy Java changes.
+
+Running the audit scripts requires Python 3 and ripgrep.
 
 ## Source
 

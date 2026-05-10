@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3
+
+- Add Python-free installers: `portable/install-kit.sh` and `portable/install-kit.ps1`.
+- Add `NO-PYTHON-INSTALL.md` for manual and script-based installation without Python.
+- Add `sensitive-scan-gate.sh` for local `pre-commit`, `commit-msg`, and `pre-push` blocking with untracked private patterns.
+- Clarify that Python is optional for installation but still required for deterministic audit execution and gate validation.
+- Add CI smoke coverage for the shell installer.
+
 ## 0.2.2
 
 - Add a mock legacy Java project under `examples/mock-legacy-java`.

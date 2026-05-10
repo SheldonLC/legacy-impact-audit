@@ -2,7 +2,7 @@
 
 `legacy-impact-audit` is a Codex skill and deterministic helper toolkit for low-token impact analysis in legacy Java or mixed enterprise repositories.
 
-Current version: `0.2.2`
+Current version: `0.2.3`
 
 It is designed for repositories where full dependency graphs are unavailable, stale, too expensive to build, or unreliable for daily change work.
 
@@ -26,10 +26,13 @@ legacy-impact-audit/
   scripts/impact_audit.py
   scripts/validate_impact_audit.py
   scripts/precommit-impact-reminder.sh
+  scripts/sensitive-scan-gate.sh
   references/hook-patterns.md
   references/llm-verification-template.md
 portable/
   install-kit.py
+  install-kit.sh
+  install-kit.ps1
   INSTALL-SAMPLES.md
 docs/
   agent-install-matrix.md
@@ -48,16 +51,29 @@ examples/
 .github/workflows/ci.yml
 AI-SELF-INSTALL.md
 AGENT-INSTALL.md
+NO-PYTHON-INSTALL.md
 CHANGELOG.md
 VERSION
 ```
 
 ## Install
 
-Install for Codex, the default target:
+Python is not required for installation. It is required later to run the deterministic audit scripts.
+
+Install for Codex, the default target, with the Python installer:
 
 ```bash
 python3 portable/install-kit.py --agent codex --scope user --force
+```
+
+Or install without Python:
+
+```bash
+sh portable/install-kit.sh --agent codex --scope user --force
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File portable/install-kit.ps1 -Agent codex -Scope user -Force
 ```
 
 This installs the skill to:
@@ -71,6 +87,8 @@ Install for every supported user-level agent target:
 ```bash
 python3 portable/install-kit.py --agent all --scope user --force
 ```
+
+For full no-Python installation options, see [NO-PYTHON-INSTALL.md](NO-PYTHON-INSTALL.md).
 
 For agent-readable installation steps, see [AGENT-INSTALL.md](AGENT-INSTALL.md).
 
@@ -121,6 +139,8 @@ For teams using this as a mandatory process gate:
 
 An `AGENTS.md` snippet is available in [examples/AGENTS-impact-audit.md](examples/AGENTS-impact-audit.md).
 
+For local-only sensitive term blocking, use `legacy-impact-audit/scripts/sensitive-scan-gate.sh` with an untracked pattern file under `.git/hooks`. See [hook patterns](legacy-impact-audit/references/hook-patterns.md).
+
 ## Workflow Test Fixture
 
 Use [docs/workflow-test-guide.md](docs/workflow-test-guide.md) and [examples/workflow-test-prompt.md](examples/workflow-test-prompt.md) to validate the full workflow with another AI agent. The mock project lives in [examples/mock-legacy-java](examples/mock-legacy-java).
@@ -153,8 +173,9 @@ This requires `.ai/legacy-impact-audit/semantic-verdict.md` to exist.
 
 ## Requirements
 
-- Python 3.10 or newer is recommended.
-- `rg` / ripgrep must be available in PATH.
+- Installation: Python is optional. Use `portable/install-kit.py`, `portable/install-kit.sh`, `portable/install-kit.ps1`, or manual copy.
+- Audit execution: Python 3.10 or newer is recommended.
+- Search: `rg` / ripgrep must be available in PATH.
 - Git is required for validator diff modes.
 
 ## License
@@ -163,7 +184,7 @@ MIT. See [LICENSE](LICENSE).
 
 ## CI
 
-The included GitHub Actions workflow runs a smoke test that compiles scripts, installs the skill into a temporary skills directory, runs a scan, and validates generated artifacts.
+The included GitHub Actions workflow runs smoke tests for Python and no-Python installers, compiles scripts, runs a scan, and validates generated artifacts.
 
 ## Publishing Notes
 

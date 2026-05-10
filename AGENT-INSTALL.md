@@ -25,22 +25,43 @@ Supported install targets:
 
 ## Prerequisites
 
-- `python3` available in PATH.
-- `rg` / ripgrep available in PATH.
+- Installation: Python is optional. Use `portable/install-kit.py`, `portable/install-kit.sh`, `portable/install-kit.ps1`, or manual copy.
+- Audit execution: `python3` must be available in PATH.
+- Search: `rg` / ripgrep must be available in PATH.
 - A writable Codex skills directory, normally `$CODEX_HOME/skills` or `~/.codex/skills`.
 
 ## Install
 
-From the extracted kit root, install for Codex:
+From the extracted kit root, install for Codex with the Python installer:
 
 ```bash
 python3 portable/install-kit.py --agent codex --scope user --force
+```
+
+Install for Codex without Python:
+
+```bash
+sh portable/install-kit.sh --agent codex --scope user --force
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File portable/install-kit.ps1 -Agent codex -Scope user -Force
 ```
 
 Install for every supported user-level target:
 
 ```bash
 python3 portable/install-kit.py --agent all --scope user --force
+```
+
+No-Python equivalents:
+
+```bash
+sh portable/install-kit.sh --agent all --scope user --force
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File portable/install-kit.ps1 -Agent all -Scope user -Force
 ```
 
 To install Codex into an explicit skills directory:
@@ -66,6 +87,8 @@ python3 portable/install-kit.py \
 ```
 
 Per-agent instructions live in `docs/`.
+
+If Python is unavailable, read [NO-PYTHON-INSTALL.md](NO-PYTHON-INSTALL.md). Installation can complete, but smoke tests and gate validation must be skipped until Python 3 is available.
 
 ## Validate
 
