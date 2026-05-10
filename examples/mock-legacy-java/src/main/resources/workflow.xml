@@ -1,0 +1,4 @@
+<workflow>
+    <step name="manualScoreChange" method="recomputePlayerScore"/>
+    <step name="nightlyTournament" method="execute"/>
+</workflow>

@@ -1,0 +1,6 @@
+<project name="mock-legacy-java">
+    <!-- The scanner should ignore build.xml even if it contains recomputePlayerScore. -->
+    <target name="recomputePlayerScore">
+        <echo message="noise only"/>
+    </target>
+</project>

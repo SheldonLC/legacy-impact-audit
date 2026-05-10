@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+.idea/
+.vscode/
+.ai/
+dist/
+build/
+*.zip
+!legacy-impact-audit-portable.zip
+!.gitkeep

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Legacy Impact Audit"
+  short_description: "Funnel-based impact analysis for legacy code"
+  default_prompt: "Use $legacy-impact-audit to analyze the impact of changing this Java method before editing."

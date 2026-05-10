@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+
+      - name: Compile scripts
+        run: |
+          python3 -m py_compile \
+            legacy-impact-audit/scripts/impact_audit.py \
+            legacy-impact-audit/scripts/validate_impact_audit.py \
+            portable/install-kit.py
+
+      - name: Install skill
+        run: |
+          python3 portable/install-kit.py --skills-dir /tmp/codex-skills --force
+          test -f /tmp/codex-skills/legacy-impact-audit/SKILL.md
+          test -f /tmp/codex-skills/legacy-impact-audit/scripts/impact_audit.py
+          test -f /tmp/codex-skills/legacy-impact-audit/scripts/validate_impact_audit.py
+
+      - name: Test multi-agent installers
+        run: |
+          mkdir -p /tmp/lia-home /tmp/lia-project
+          HOME=/tmp/lia-home CODEX_HOME=/tmp/lia-home/.codex \
+            python3 portable/install-kit.py --agent all --scope user --force
+          python3 portable/install-kit.py \
+            --agent claude,opencode,gemini,copilot,deepcode \
+            --scope project \
+            --project-root /tmp/lia-project \
+            --force
+          test -f /tmp/lia-home/.claude/skills/legacy-impact-audit/SKILL.md
+          test -f /tmp/lia-home/.gemini/GEMINI.md
+          test -f /tmp/lia-project/.github/copilot-instructions.md
+          test -f /tmp/lia-project/GEMINI.md
+
+      - name: Run scan smoke test
+        run: |
+          python3 /tmp/codex-skills/legacy-impact-audit/scripts/impact_audit.py scan \
+            --root legacy-impact-audit \
+            --symbol scan \
+            --include-glob '*.py' \
+            --max-candidates 5 \
+            --output-dir /tmp/legacy-impact-audit-smoke
+
+      - name: Validate smoke artifacts
+        run: |
+          python3 /tmp/codex-skills/legacy-impact-audit/scripts/validate_impact_audit.py \
+            --root . \
+            --audit-dir /tmp/legacy-impact-audit-smoke \
+            --mode worktree \
+            --always-require
+
+      - name: Run mock workflow fixture
+        run: |
+          python3 legacy-impact-audit/scripts/impact_audit.py scan \
+            --root examples/mock-legacy-java \
+            --symbol recomputePlayerScore \
+            --owner-class ArcadeScoreService \
+            --owner-package com.example.sandbox.arcade \
+            --definition-file src/main/java/com/example/sandbox/arcade/ArcadeScoreService.java \
+            --max-candidates 20
+
+          set +e
+          python3 legacy-impact-audit/scripts/impact_audit.py scan \
+            --root examples/mock-legacy-java \
+            --symbol execute \
+            --max-candidates 10 \
+            --raw-limit 9999 \
+            --generic-limit 2 \
+            --output-dir /tmp/legacy-impact-audit-generic-gate \
+            --fail-on-refine
+          status=$?
+          set -e
+          test "$status" -eq 2
+
+          cat > examples/mock-legacy-java/.ai/legacy-impact-audit/semantic-verdict.md <<'EOF'
+          # Semantic Verdict
+
+          - TournamentJob.java: real_dependency, high confidence.
+          - ScoreConsoleController.java: real_dependency, high confidence.
+          - ArcadeScoreServiceTest.java: possible_dependency for regression scope.
+          - ScoreTemplateRegistry.java: not_dependency, high confidence.
+          - workflow.xml: needs_manual_check, medium confidence.
+          EOF
+
+          python3 legacy-impact-audit/scripts/validate_impact_audit.py \
+            --root examples/mock-legacy-java \
+            --mode worktree \
+            --always-require \
+            --require-verdicts
