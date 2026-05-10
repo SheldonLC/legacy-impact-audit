@@ -69,6 +69,24 @@ function osHome() {
   return process.env.HOME || process.env.USERPROFILE || ".";
 }
 
+// ── OS-aware command generation ──
+
+function isWindows() {
+  return process.platform === "win32";
+}
+
+function auditCommand(scriptPath) {
+  const py = isWindows() ? "python" : "python3";
+  const sep = isWindows() ? " \\\n  " : " \\\n  ";
+  const pathSep = isWindows() ? "\\" : "/";
+  const psPath = scriptPath.replace(/\//g, pathSep);
+  return [
+    `${py} "${psPath}/scripts/impact_audit.py" scan`,
+    "--root . --symbol METHOD_NAME --owner-class OWNER_CLASS",
+    "--owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java",
+  ].join(sep);
+}
+
 function isNpmGlobal() {
   // Detect if this is a global npm install by checking if we're in npm's global node_modules
   try {
@@ -141,12 +159,9 @@ Gate rules:
 Command pattern:
 
 \`\`\`bash
-python3 "${escaped}/scripts/impact_audit.py" scan \\
-  --root . \\
-  --symbol METHOD_NAME \\
-  --owner-class OWNER_CLASS \\
-  --owner-package OWNER_PACKAGE \\
-  --definition-file path/to/OwnerClass.java
+python3 "${scriptPath}/scripts/impact_audit.py" scan \\
+  --root . --symbol METHOD_NAME --owner-class OWNER_CLASS \\
+  --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java
 \`\`\`
 ${MARKER_END}`;
 }
@@ -247,6 +262,8 @@ function writeAgentHook(target) {
 
   // Skill path relative to the installed location
   const scriptPath = target.skillDir.replace(/\\/g, "/");
+const cmd = auditCommand(scriptPath);
+const fence = isWindows() ? "powershell" : "bash";
   const block = `\
 <!-- legacy-impact-audit:start -->
 ## Legacy Impact Audit
@@ -272,10 +289,8 @@ approval, reconciliation, core business logic.
 - Do not feed raw search results to LLM; use the generated report.
 - Test/regression scope from \`real_dependency\` and \`possible_dependency\`.
 
-\`\`\`bash
-python3 "${scriptPath}/scripts/impact_audit.py" scan \\
-  --root . --symbol METHOD_NAME --owner-class OWNER_CLASS \\
-  --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java
+\`\`\`${fence}
+${cmd}
 \`\`\`
 <!-- legacy-impact-audit:end -->`;
 

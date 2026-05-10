@@ -180,6 +180,9 @@ function writeAgentConfigHook(agent, installedSkillDir) {
   if (!cfg) return;
   const targetFile = path.join(cfg.dir, cfg.file);
   const scriptPath = installedSkillDir.replace(/\\/g, "/");
+  const py = process.platform === "win32" ? "python" : "python3";
+  const fence = process.platform === "win32" ? "powershell" : "bash";
+  const cmd = `${py} "${scriptPath}/scripts/impact_audit.py" scan --root . --symbol METHOD_NAME --owner-class OWNER_CLASS --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java`;
   const block = `\
 <!-- legacy-impact-audit:start -->
 ## Legacy Impact Audit
@@ -211,10 +214,8 @@ Gate rules:
 - Do not ask an LLM to analyze raw search results; use the generated report.
 - Test/regression scope from \`real_dependency\` and \`possible_dependency\`.
 
-\`\`\`bash
-python3 "${scriptPath}/scripts/impact_audit.py" scan \\
-  --root . --symbol METHOD_NAME --owner-class OWNER_CLASS \\
-  --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java
+\`\`\`${fence}
+${cmd}
 \`\`\`
 <!-- legacy-impact-audit:end -->`;
 
@@ -283,6 +284,16 @@ function installCodexSessionHook() {
 }
 
 function instructionBlock(scriptPath) {
+  const py = process.platform === "win32" ? "python" : "python3";
+  const fence = process.platform === "win32" ? "powershell" : "bash";
+  const lineCont = process.platform === "win32" ? " \\\n  " : " \\\n  ";
+  const psPath = process.platform === "win32" ? scriptPath.replace(/\//g, "\\") : scriptPath;
+  const cmd = [
+    `${py} "${psPath}/scripts/impact_audit.py" scan`,
+    "--root . --symbol METHOD_NAME --owner-class OWNER_CLASS",
+    "--owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java",
+  ].join(lineCont);
+
   return `\
 ${MARKER_START}
 ## Legacy Impact Audit
@@ -326,10 +337,8 @@ calculation, scoring, approval, reconciliation, or core business logic.
 
 ### Command
 
-\`\`\`bash
-python3 "${scriptPath}/scripts/impact_audit.py" scan \\
-  --root . --symbol METHOD_NAME --owner-class OWNER_CLASS \\
-  --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java
+\`\`\`${fence}
+${cmd}
 \`\`\`
 ${MARKER_END}`;
 }

@@ -176,7 +176,28 @@ def resolve_path(path_arg: str | None, repo_root: Path, search_root: Path) -> Pa
     return (repo_root / path).resolve()
 
 
-def run_rg(
+def _is_rg_available() -> bool:
+    try:
+        subprocess.run(["rg", "--version"], capture_output=True, check=False, timeout=3)
+        return True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def run_search(
+    root: Path,
+    symbol: str,
+    include_globs: list[str],
+    exclude_globs: list[str],
+    source_encoding: str,
+) -> list[Match]:
+    """Run rg for structured results, with grep fallback on systems without ripgrep."""
+    if _is_rg_available():
+        return _run_rg(root, symbol, include_globs, exclude_globs, source_encoding)
+    return _run_grep_fallback(root, symbol, include_globs, exclude_globs)
+
+
+def _run_rg(
     root: Path,
     symbol: str,
     include_globs: list[str],
@@ -235,6 +256,80 @@ def run_rg(
                 line_number=int(data.get("line_number", 0)),
                 column=column,
                 line=line.rstrip("\n\r"),
+            )
+        )
+    return matches
+
+
+def _run_grep_fallback(
+    root: Path,
+    symbol: str,
+    include_globs: list[str],
+    exclude_globs: list[str],
+) -> list[Match]:
+    """Fallback: use grep when ripgrep is not available (pre-installed on all Unix)."""
+    # Build grep command: grep -rnF <symbol> <root>
+    cmd: list[str] = ["grep", "-rnF", symbol, str(root)]
+
+    # Add --include for each glob
+    for glob_pat in include_globs:
+        cmd.extend(["--include", glob_pat])
+
+    # Exclude standard noise directories
+    for noise_dir in [".git", "node_modules", "target", "build", "dist", "out", "coverage", "vendor", "generated", "__pycache__"]:
+        cmd.extend(["--exclude-dir", noise_dir])
+
+    # Additional user exclude patterns
+    for glob_pat in exclude_globs:
+        clean = glob_pat.lstrip("!")
+        if clean.count("/") <= 1 and not clean.startswith("*."):
+            cmd.extend(["--exclude-dir", clean.split("/")[0]])
+        elif clean.startswith("*."):
+            cmd.extend(["--exclude", clean])
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            text=True,
+            encoding=DEFAULT_ENCODING,
+            errors="replace",
+            capture_output=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        raise SystemExit(
+            "Neither rg nor grep was found in PATH.\n"
+            "  Install ripgrep:\n"
+            "    macOS:  brew install ripgrep\n"
+            "    Linux:  apt install ripgrep   (or: dnf install ripgrep)\n"
+            "    Windows: https://github.com/BurntSushi/ripgrep/releases\n"
+            "  Or ensure grep is available (pre-installed on macOS/Linux)."
+        )
+
+    if proc.returncode not in (0, 1):
+        raise SystemExit(proc.stderr.strip() or "grep failed")
+
+    # Parse grep output: file:lineno:content
+    matches: list[Match] = []
+    for raw_line in proc.stdout.splitlines():
+        # Format: path:lineno:line_content
+        parts = raw_line.split(":", 2)
+        if len(parts) < 3:
+            continue
+        path_str, lineno_str, line_content = parts
+        try:
+            lineno = int(lineno_str)
+        except ValueError:
+            continue
+        # Skip binary file markers
+        if path_str == "Binary file" and "matches" in line_content:
+            continue
+        matches.append(
+            Match(
+                path=os.path.normpath(path_str),
+                line_number=lineno,
+                column=0,  # grep doesn't report column
+                line=line_content.rstrip("\n\r"),
             )
         )
     return matches
@@ -912,7 +1007,7 @@ def write_html_report(
 
     tree_lines = []
     source_mod = extract_module(target.get("definition_file", ""), search_root) if search_root and target.get("definition_file") else ""
-    root_label = f"{source_mod} (source)" if source_mod else target.get("owner_class", "Source")
+    root_label = f"{source_mod} (source)" if source_mod else (target.get("owner_class") or "Source")
     tree_lines.append(root_label)
     for i, (mod_name, m) in enumerate(sorted_mods):
         prefix = " └── " if i == len(sorted_mods) - 1 else " ├── "
@@ -983,7 +1078,7 @@ def write_html_report(
 
 <h2>Blast Radius</h2>
 <p><strong>{len(modules)} module(s)</strong> affected.</p>
-<div class="tree">{chr(10).join(tree_lines)}</div>
+<div class="tree">{chr(10).join(str(line) for line in tree_lines if line is not None)}</div>
 
 <h3>Module Summary</h3>
 <table>
@@ -1042,7 +1137,7 @@ def scan(args: argparse.Namespace) -> int:
 
     include_globs = args.include_glob or DEFAULT_INCLUDE_GLOBS
     exclude_globs = DEFAULT_EXCLUDE_GLOBS + (args.exclude_glob or [])
-    raw_matches = run_rg(search_root, args.symbol, include_globs, exclude_globs, args.encoding)
+    raw_matches = run_search(search_root, args.symbol, include_globs, exclude_globs, args.encoding)
     filtered_matches = [match for match in raw_matches if not is_noise_line(match.line)]
     definition_abs = resolve_path(args.definition_file, repo_root, search_root)
     candidates = rank_candidates(
@@ -1158,7 +1253,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument("--definition-file", default=None, help="Path to the file defining the target method")
     scan_parser.add_argument("--output-dir", default="__AUTO__", help="Output directory (default: LEGACY_IMPACT_RESULTS/YYYYMMDD-NN/)")
     scan_parser.add_argument("--cache-file", default=".ai/legacy-impact-audit/cache.json", help="Dependency verdict cache")
-    scan_parser.add_argument("--max-candidates", type=int, default=30, help="Top candidates included in report packet")
+    scan_parser.add_argument("--max-candidates", type=int, default=100, help="Max candidates in report (HIGH never truncated)")
     scan_parser.add_argument("--context-lines", type=int, default=6, help="Context lines around each match")
     scan_parser.add_argument("--raw-limit", type=int, default=1000, help="Hard raw-match breaker")
     scan_parser.add_argument("--generic-limit", type=int, default=200, help="Breaker for generic symbols without owner info")
