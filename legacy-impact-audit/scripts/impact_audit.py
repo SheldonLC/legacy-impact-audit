@@ -762,7 +762,7 @@ def write_report(
             "",
         ]
     )
-    path.write_text("\n".join(lines), encoding="utf-8")
+    path.write_text("\n".join(str(line) for line in lines if line is not None), encoding="utf-8")
 
 
 def write_llm_packet(path: Path, payload: dict[str, Any], top_candidates: list[FileCandidate]) -> None:
@@ -811,7 +811,219 @@ def write_llm_packet(path: Path, payload: dict[str, Any], top_candidates: list[F
                     "",
                 ]
             )
-    path.write_text("\n".join(lines), encoding="utf-8")
+    path.write_text("\n".join(str(line) for line in lines if line is not None), encoding="utf-8")
+
+
+def default_output_dir(root: Path) -> Path:
+    """Generate timestamped output dir: LEGACY_IMPACT_RESULTS/YYYYMMDD-NN/"""
+    base = root / "LEGACY_IMPACT_RESULTS"
+    today = dt.date.today().strftime("%Y%m%d")
+    base.mkdir(parents=True, exist_ok=True)
+    existing = sorted(base.glob(f"{today}-*")) if base.exists() else []
+    seq = 1
+    if existing:
+        try:
+            nums = [int(d.name.split("-")[-1]) for d in existing if d.name.startswith(today)]
+            seq = max(nums) + 1 if nums else 1
+        except (ValueError, IndexError):
+            seq = 1
+    return base / f"{today}-{seq:02d}"
+
+
+def write_html_report(
+    path: Path,
+    payload: dict[str, Any],
+    top_candidates: list[FileCandidate],
+    all_candidates: list[FileCandidate],
+    search_root: Path | None = None,
+) -> None:
+    """Generate a standalone, clean HTML report."""
+    target = payload["target"]
+    gate = payload["gate"]
+
+    def hescape(text: str) -> str:
+        return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+
+    # Module summary uses ALL candidates, not just top N
+    modules: dict[str, dict[str, int]] = {}
+    for item in all_candidates:
+        mod = extract_module(item.path, search_root) if search_root else ""
+        if mod not in modules:
+            modules[mod] = {"files": 0, "high": 0}
+        modules[mod]["files"] += 1
+        if item.priority == "HIGH":
+            modules[mod]["high"] += 1
+
+    sorted_mods = sorted(modules.items(), key=lambda x: (-x[1]["high"], -x[1]["files"]))
+
+    module_rows = ""
+    for mod_name, m in sorted_mods:
+        emoji = "🔴" if m["high"] > 0 else "⚫"
+        module_rows += f"<tr><td>{hescape(mod_name)}</td><td>{m['files']}</td><td>{m['high']}</td><td>{emoji}</td></tr>\n"
+
+    # Candidate rows: show ALL HIGH/MEDIUM, truncate LOW/BACKGROUND at limit
+    display_candidates = []
+    truncated_count = 0
+    # Always include all HIGH + MEDIUM
+    for item in all_candidates:
+        if item.priority in ("HIGH", "MEDIUM"):
+            display_candidates.append(item)
+    # Fill remaining slots with LOW/BACKGROUND up to the limit
+    low_fill = [item for item in all_candidates if item.priority not in ("HIGH", "MEDIUM")]
+    total_high_med = len(display_candidates)
+    total_low_bg = len(low_fill)
+    # Use max(len(display_candidates), min_limit) so HIGH+MEDIUM are never cut
+    display_limit = max(len(display_candidates), len(top_candidates))
+    for item in low_fill[:display_limit - len(display_candidates)]:
+        display_candidates.append(item)
+    if total_low_bg > (display_limit - total_high_med):
+        truncated_count = total_low_bg - (display_limit - total_high_med)
+
+    candidate_rows = ""
+    for idx, item in enumerate(display_candidates, start=1):
+        mod = extract_module(item.path, search_root) if search_root else ""
+        file_url = f"file:///{item.path.replace(chr(92), '/')}"
+        file_link = f'<a href="{file_url}" target="_blank" title="Open in editor">{hescape(item.path)}</a>'
+        candidate_rows += (
+            f'<tr class="pri-{item.priority.lower()}">'
+            f"<td>{idx}</td>"
+            f'<td>{risk_emoji(item.priority)} {item.priority}</td>'
+            f"<td>{item.score}</td>"
+            f"<td>{hescape(mod)}</td>"
+            f'<td class="file">{file_link}</td>'
+            f"<td>{hescape(','.join(str(x) for x in item.match_lines[:8]))}</td>"
+            f"<td>{hescape(', '.join(item.reasons))}</td>"
+            f"</tr>\n"
+        )
+
+    truncation_warning = ""
+    if truncated_count > 0:
+        truncation_warning = f"""\
+<div class="trunc-warn">
+  <h3>⚠️ TRUNCATED — {truncated_count} LOW/BACKGROUND candidate(s) hidden</h3>
+  <p>The table above shows <strong>ALL {total_high_med} HIGH/MEDIUM</strong> candidates.
+     <strong>{truncated_count} additional LOW/BACKGROUND</strong> candidates were truncated for readability.</p>
+  <p>To see all candidates, re-run with <code>--max-candidates {display_limit + truncated_count}</code>
+     or check <code>impact-scan.json</code> for the complete list.</p>
+  <p><em>Decision: Do you need these truncated candidates for your analysis? If the HIGH candidates
+     already cover the blast radius, the truncated ones are low-risk. Re-run with a higher limit
+     if you need full coverage.</em></p>
+</div>"""
+
+    tree_lines = []
+    source_mod = extract_module(target.get("definition_file", ""), search_root) if search_root and target.get("definition_file") else ""
+    root_label = f"{source_mod} (source)" if source_mod else target.get("owner_class", "Source")
+    tree_lines.append(root_label)
+    for i, (mod_name, m) in enumerate(sorted_mods):
+        prefix = " └── " if i == len(sorted_mods) - 1 else " ├── "
+        emoji = "🔴" if m["high"] > 0 else "⚫"
+        tree_lines.append(f"{prefix}{emoji} {mod_name} ({m['files']} files, {m['high']} HIGH)")
+
+    gate_html = '<span class="gate-pass">✅ PASS</span>' if gate["status"] == "PASS" else '<span class="gate-refine">⛔ REFINE_REQUIRED</span>'
+    refine_block = ""
+    if gate["status"] == "REFINE_REQUIRED":
+        refine_block = '<div class="warn-box"><h3>⛔ REFINE REQUIRED</h3><p>Do not proceed. Narrow scope and re-run.</p></div>'
+
+    html = f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Legacy Impact Audit — {hescape(target['symbol'])}</title>
+<style>
+  body {{ font-family: -apple-system, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f8f9fa; color: #333; }}
+  h1 {{ color: #1a1a2e; border-bottom: 2px solid #4361ee; padding-bottom: 8px; }}
+  h2 {{ color: #2d3436; margin-top: 30px; }}
+  .meta {{ color: #666; font-size: 14px; }}
+  .gate-pass {{ background: #d4edda; color: #155724; padding: 4px 12px; border-radius: 4px; font-weight: bold; }}
+  .gate-refine {{ background: #f8d7da; color: #721c24; padding: 4px 12px; border-radius: 4px; font-weight: bold; }}
+  table {{ width: 100%; border-collapse: collapse; margin: 15px 0; background: white; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+  th {{ background: #4361ee; color: white; padding: 10px 12px; text-align: left; font-size: 13px; }}
+  td {{ padding: 8px 12px; border-bottom: 1px solid #e9ecef; font-size: 13px; }}
+  tr:hover {{ background: #f1f3ff; }}
+  .file {{ font-family: monospace; font-size: 12px; max-width: 400px; word-break: break-all; }}
+  tr.pri-high {{ background: #fff5f5; }}
+  .tree {{ font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 15px; border-radius: 6px; white-space: pre; line-height: 1.6; }}
+  .stats {{ display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 15px 0; }}
+  .stat {{ background: white; padding: 12px; border-radius: 6px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }}
+  .stat-val {{ font-size: 24px; font-weight: bold; color: #4361ee; }}
+  .stat-label {{ font-size: 11px; color: #666; text-transform: uppercase; }}
+  .warn-box {{ background: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 6px; margin: 20px 0; }}
+  .warn-box h3 {{ margin-top: 0; }}
+  .confirm-box {{ background: #cce5ff; border: 2px solid #004085; padding: 20px; border-radius: 8px; margin: 25px 0; }}
+  .confirm-box h2 {{ margin-top: 0; color: #004085; border: none; }}
+  .confirm-box ol {{ font-size: 15px; line-height: 1.8; }}
+  .trunc-warn {{ background: #ffebee; border: 2px solid #d32f2f; padding: 20px; border-radius: 8px; margin: 25px 0; }}
+  .trunc-warn h3 {{ margin-top: 0; color: #b71c1c; }} 
+</style>
+</head>
+<body>
+
+<h1>🔍 Legacy Impact Audit Report</h1>
+<p class="meta">Generated: {payload['generated_at']} | Symbol: <strong>{hescape(target['symbol'])}</strong></p>
+
+<h2>Target</h2>
+<table>
+<tr><th>Symbol</th><td><code>{hescape(target['symbol'])}</code></td></tr>
+<tr><th>Owner Class</th><td><code>{hescape(target.get('owner_class', '') or '—')}</code></td></tr>
+<tr><th>Owner Package</th><td><code>{hescape(target.get('owner_package', '') or '—')}</code></td></tr>
+<tr><th>Definition File</th><td class="file">{hescape(target.get('definition_file', '') or '—')}</td></tr>
+</table>
+
+<h2>Gate</h2>
+{gate_html}
+<p><strong>Reasons:</strong> {', '.join(gate['reasons'])}</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-val">{payload['counts']['raw_matches']}</div><div class="stat-label">Raw Matches</div></div>
+  <div class="stat"><div class="stat-val">{payload['counts']['filtered_matches']}</div><div class="stat-label">Filtered</div></div>
+  <div class="stat"><div class="stat-val">{payload['counts']['candidate_files']}</div><div class="stat-label">Candidate Files</div></div>
+  <div class="stat"><div class="stat-val">{payload['counts']['reported_candidates']}</div><div class="stat-label">Reported</div></div>
+</div>
+
+<h2>Blast Radius</h2>
+<p><strong>{len(modules)} module(s)</strong> affected.</p>
+<div class="tree">{chr(10).join(tree_lines)}</div>
+
+<h3>Module Summary</h3>
+<table>
+<tr><th>Module</th><th>Files</th><th>HIGH</th><th>Risk</th></tr>
+{module_rows}
+</table>
+
+<h2>Ranked Candidates</h2>
+<table>
+<tr><th>#</th><th>Risk</th><th>Score</th><th>Module</th><th>File</th><th>Lines</th><th>Reasons</th></tr>
+{candidate_rows}
+</table>
+
+{truncation_warning}
+
+{refine_block}
+
+<div class="confirm-box">
+<h2>⚠️ CONFIRMATION GATE</h2>
+<p><strong>You must review the audit results above before proceeding.</strong></p>
+<ol>
+  <li>Review the <strong>Blast Radius</strong> — which modules are impacted?</li>
+  <li>Check <strong>Ranked Candidates</strong> — are all HIGH entries confirmed?</li>
+  <li>Identify <strong>Regression Scope</strong>: which modules need testing?</li>
+  <li>Decide <strong>L1 vs L2</strong>: does this API cross a public service boundary?</li>
+  <li><strong>Confirm</strong> to proceed. If unsure, narrow and re-run.</li>
+</ol>
+<p><em>This gate exists to prevent unverified changes to legacy code. Do not bypass.</em></p>
+</div>
+
+<h2>Artifacts</h2>
+<ul>
+  <li>📄 <code>impact-report.md</code> — Markdown report</li>
+  <li>🤖 <code>llm-packet.md</code> — LLM confirmation prompt</li>
+  <li>📊 <code>impact-scan.json</code> — Machine-readable data</li>
+</ul>
+
+</body>
+</html>"""
+    path.write_text(html, encoding="utf-8")
 
 
 def scan(args: argparse.Namespace) -> int:
@@ -820,9 +1032,12 @@ def scan(args: argparse.Namespace) -> int:
     search_root = repo_root
     if args.module_path:
         search_root = (repo_root / args.module_path).resolve()
-    output_dir = Path(args.output_dir)
-    if not output_dir.is_absolute():
-        output_dir = repo_root / output_dir
+    if args.output_dir == "__AUTO__":
+        output_dir = default_output_dir(repo_root)
+    elif not Path(args.output_dir).is_absolute():
+        output_dir = repo_root / args.output_dir
+    else:
+        output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     include_globs = args.include_glob or DEFAULT_INCLUDE_GLOBS
@@ -892,15 +1107,18 @@ def scan(args: argparse.Namespace) -> int:
 
     scan_json = output_dir / "impact-scan.json"
     report_md = output_dir / "impact-report.md"
+    report_html = output_dir / "impact-report.html"
     packet_md = output_dir / "llm-packet.md"
     write_json(scan_json, payload)
     write_report(report_md, payload, top_candidates, search_root)
+    write_html_report(report_html, payload, top_candidates, candidates, search_root)
     write_llm_packet(packet_md, payload, top_candidates)
 
     print(f"gate={status}")
     print(f"raw_matches={len(raw_matches)} filtered_matches={len(filtered_matches)} candidate_files={len(candidates)}")
     print(f"cache={cache_status} key={cache_key}")
     print(f"report={report_md}")
+    print(f"html={report_html}")
     print(f"packet={packet_md}")
     print(f"json={scan_json}")
     if status == "REFINE_REQUIRED" and args.fail_on_refine:
@@ -938,7 +1156,7 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument("--owner-class", default=None, help="Class that owns the method")
     scan_parser.add_argument("--owner-package", default=None, help="Package of the owner class")
     scan_parser.add_argument("--definition-file", default=None, help="Path to the file defining the target method")
-    scan_parser.add_argument("--output-dir", default=".ai/legacy-impact-audit", help="Directory for report outputs")
+    scan_parser.add_argument("--output-dir", default="__AUTO__", help="Output directory (default: LEGACY_IMPACT_RESULTS/YYYYMMDD-NN/)")
     scan_parser.add_argument("--cache-file", default=".ai/legacy-impact-audit/cache.json", help="Dependency verdict cache")
     scan_parser.add_argument("--max-candidates", type=int, default=30, help="Top candidates included in report packet")
     scan_parser.add_argument("--context-lines", type=int, default=6, help="Context lines around each match")
