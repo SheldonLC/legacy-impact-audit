@@ -28,7 +28,7 @@ DEFAULT_WATCH_GLOBS = [
 
 def read_json(path: Path) -> dict:
     try:
-        return json.loads(path.read_text(encoding="utf-8", errors="ignore"))
+        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
     except FileNotFoundError:
         raise SystemExit(f"missing required audit artifact: {path}")
     except json.JSONDecodeError as exc:
@@ -46,6 +46,8 @@ def git_changed_files(root: Path, mode: str) -> list[str]:
             ["git", *args_by_mode[mode]],
             cwd=str(root),
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             check=False,
         )

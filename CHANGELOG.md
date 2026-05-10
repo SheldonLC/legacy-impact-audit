@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.4
+
+- Fix Windows subprocess decoding by forcing UTF-8 replacement decoding for `rg` and Git command output.
+- Add `--encoding` to scan commands for legacy source files.
+- Make `precommit-impact-reminder.sh` mtime checks portable across GNU, macOS, and Git Bash environments.
+- Document `LEGACY_IMPACT_AUDIT_HOME` and `rg` preflight expectations.
+- Add optional cache pruning controls to `cache-put`.
+
 ## 0.2.3
 
 - Add Python-free installers: `portable/install-kit.sh` and `portable/install-kit.ps1`.

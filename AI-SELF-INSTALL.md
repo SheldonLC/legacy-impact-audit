@@ -13,6 +13,7 @@ Install `legacy-impact-audit` for the current agent or for the target project, v
 - Do not call an LLM from installation scripts. The scripts are deterministic.
 - Python is optional for installation. If Python is unavailable, use `portable/install-kit.sh`, `portable/install-kit.ps1`, or manual copy from `NO-PYTHON-INSTALL.md`.
 - Python is required for audit execution, smoke tests, and gate validation. If unavailable, install only and report skipped runtime validation.
+- `rg` / ripgrep is required for audit execution. Run `rg --version` before smoke tests and report it as missing if unavailable.
 - Prefer project-scope install when the user wants a repository to enforce the audit gate for multiple agents.
 - Prefer user-scope install when the user wants the current machine/account to use the skill globally.
 

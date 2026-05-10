@@ -25,13 +25,17 @@ Run a cheap-to-expensive impact funnel before editing risky legacy code. Prefer 
 From the target repository:
 
 ```bash
-python3 "${CODEX_HOME:-$HOME/.codex}/skills/legacy-impact-audit/scripts/impact_audit.py" scan \
+impact_home="${LEGACY_IMPACT_AUDIT_HOME:-${CODEX_HOME:-$HOME/.codex}/skills/legacy-impact-audit}"
+python3 "$impact_home/scripts/impact_audit.py" scan \
   --root . \
   --symbol recomputePlayerScore \
   --owner-class ArcadeScoreService \
   --owner-package com.example.sandbox.arcade \
-  --definition-file src/main/java/com/example/sandbox/arcade/ArcadeScoreService.java
+  --definition-file src/main/java/com/example/sandbox/arcade/ArcadeScoreService.java \
+  --encoding utf-8
 ```
+
+Prerequisites: Python 3 and `rg` / ripgrep must be available in PATH. If the skill is installed outside the Codex default path, set `LEGACY_IMPACT_AUDIT_HOME` to the installed `legacy-impact-audit` directory. For legacy source files, pass `--encoding gbk` or another Python/ripgrep-supported encoding; use `--encoding auto` to let ripgrep use its default detection while snippets fall back to UTF-8 replacement decoding.
 
 Read the generated files in `.ai/legacy-impact-audit/`:
 
@@ -104,6 +108,8 @@ Use cache hits only when the script reports the same cache key and candidate has
 - The method signature or owner class changes.
 - A candidate file hash changes.
 - The prior confidence was below `high`.
+
+Use `cache-put --cache-max-entries` and `--cache-ttl-days` when a long-running repository needs local cache pruning.
 
 ## Optional Hooks
 

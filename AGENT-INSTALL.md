@@ -27,7 +27,7 @@ Supported install targets:
 
 - Installation: Python is optional. Use `portable/install-kit.py`, `portable/install-kit.sh`, `portable/install-kit.ps1`, or manual copy.
 - Audit execution: `python3` must be available in PATH.
-- Search: `rg` / ripgrep must be available in PATH.
+- Search: `rg` / ripgrep must be available in PATH. Run `rg --version` before the first audit and stop with install guidance if it is missing.
 - A writable Codex skills directory, normally `$CODEX_HOME/skills` or `~/.codex/skills`.
 
 ## Install
@@ -132,8 +132,11 @@ python3 "$HOME/.codex/skills/legacy-impact-audit/scripts/impact_audit.py" scan \
   --symbol METHOD_NAME \
   --owner-class OWNER_CLASS \
   --owner-package OWNER_PACKAGE \
-  --definition-file path/to/OwnerClass.java
+  --definition-file path/to/OwnerClass.java \
+  --encoding utf-8
 ```
+
+For legacy files that are not UTF-8, pass the appropriate encoding, such as `--encoding gbk`, or use `--encoding auto` to let ripgrep use its default detection.
 
 Read these outputs:
 

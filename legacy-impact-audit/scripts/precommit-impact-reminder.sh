@@ -27,7 +27,16 @@ if [ ! -f "$report" ]; then
 fi
 
 now="$(date +%s)"
-mtime="$(stat -c %Y "$report")"
+mtime="$(
+  python3 -c 'import os, sys; print(int(os.path.getmtime(sys.argv[1])))' "$report" 2>/dev/null ||
+    stat -c %Y "$report" 2>/dev/null ||
+    stat -f %m "$report" 2>/dev/null ||
+    echo 0
+)"
+if [ "$mtime" -eq 0 ]; then
+  echo "Could not determine impact report mtime. Re-run legacy-impact-audit if scope changed." >&2
+  exit 1
+fi
 age_minutes="$(( (now - mtime) / 60 ))"
 if [ "$age_minutes" -gt "${LEGACY_IMPACT_AUDIT_MAX_REPORT_AGE_MINUTES:-240}" ]; then
   echo "Impact report is older than ${LEGACY_IMPACT_AUDIT_MAX_REPORT_AGE_MINUTES:-240} minutes. Re-run legacy-impact-audit if scope changed." >&2

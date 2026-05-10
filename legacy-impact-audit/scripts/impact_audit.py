@@ -10,6 +10,7 @@ has reduced the candidate set.
 from __future__ import annotations
 
 import argparse
+import codecs
 import datetime as dt
 import hashlib
 import json
@@ -51,6 +52,8 @@ DEFAULT_EXCLUDE_GLOBS = [
     "!**/*.ear",
     "!**/*.min.js",
 ]
+
+DEFAULT_ENCODING = "utf-8"
 
 COMMON_SYMBOLS = {
     "add",
@@ -140,9 +143,22 @@ def sha1_file(path: Path) -> str | None:
         return None
 
 
-def read_text(path: Path) -> str:
+def normalize_encoding(encoding: str | None) -> str:
+    if not encoding or encoding.lower() == "auto":
+        return DEFAULT_ENCODING
+    return encoding
+
+
+def validate_encoding(encoding: str | None) -> None:
     try:
-        return path.read_text(encoding="utf-8", errors="ignore")
+        codecs.lookup(normalize_encoding(encoding))
+    except LookupError:
+        raise SystemExit(f"Unsupported text encoding: {encoding}")
+
+
+def read_text(path: Path, encoding: str | None = DEFAULT_ENCODING) -> str:
+    try:
+        return path.read_text(encoding=normalize_encoding(encoding), errors="replace")
     except OSError:
         return ""
 
@@ -160,7 +176,13 @@ def resolve_path(path_arg: str | None, repo_root: Path, search_root: Path) -> Pa
     return (repo_root / path).resolve()
 
 
-def run_rg(root: Path, symbol: str, include_globs: list[str], exclude_globs: list[str]) -> list[Match]:
+def run_rg(
+    root: Path,
+    symbol: str,
+    include_globs: list[str],
+    exclude_globs: list[str],
+    source_encoding: str,
+) -> list[Match]:
     cmd = [
         "rg",
         "--json",
@@ -171,6 +193,8 @@ def run_rg(root: Path, symbol: str, include_globs: list[str], exclude_globs: lis
         "never",
         "--fixed-strings",
     ]
+    if source_encoding.lower() != "auto":
+        cmd.extend(["--encoding", source_encoding])
     for glob in include_globs:
         cmd.extend(["-g", glob])
     for glob in exclude_globs:
@@ -178,7 +202,14 @@ def run_rg(root: Path, symbol: str, include_globs: list[str], exclude_globs: lis
     cmd.extend([symbol, str(root)])
 
     try:
-        proc = subprocess.run(cmd, text=True, capture_output=True, check=False)
+        proc = subprocess.run(
+            cmd,
+            text=True,
+            encoding=DEFAULT_ENCODING,
+            errors="replace",
+            capture_output=True,
+            check=False,
+        )
     except FileNotFoundError:
         raise SystemExit("rg is required but was not found in PATH")
 
@@ -299,6 +330,7 @@ def rank_candidates(
     owner_package: str | None,
     definition_abs: Path | None,
     context_lines: int,
+    source_encoding: str,
 ) -> list[FileCandidate]:
     by_file: dict[str, list[Match]] = {}
     for match in matches:
@@ -316,7 +348,7 @@ def rank_candidates(
         except OSError:
             abs_path = search_root / path
 
-        text = read_text(abs_path)
+        text = read_text(abs_path, source_encoding)
         lines = text.splitlines()
         package_name, imports, static_imports = extract_java_metadata(text)
         file_kind = classify_file(path_text)
@@ -416,6 +448,8 @@ def git_value(root: Path, args: list[str]) -> str | None:
             ["git", *args],
             cwd=str(root),
             text=True,
+            encoding=DEFAULT_ENCODING,
+            errors="replace",
             capture_output=True,
             check=False,
         )
@@ -434,6 +468,7 @@ def compute_cache_key(
     definition_file: str | None,
     definition_abs: Path | None,
     candidates: list[FileCandidate],
+    source_encoding: str,
 ) -> str:
     definition_hash = sha1_file(definition_abs) if definition_abs else None
     payload = {
@@ -441,6 +476,7 @@ def compute_cache_key(
         "owner_class": owner_class,
         "owner_package": owner_package,
         "definition_file": definition_file,
+        "encoding": source_encoding,
         "definition_hash": definition_hash,
         "git_head": git_value(repo_root, ["rev-parse", "HEAD"]),
         "git_diff_hash": sha1_text(git_value(repo_root, ["diff", "--", "*.java", "*.xml", "*.properties", "*.sql"]) or ""),
@@ -460,6 +496,40 @@ def load_cache(cache_file: Path) -> dict[str, Any]:
         return json.loads(read_text(cache_file))
     except json.JSONDecodeError:
         return {"version": 1, "entries": {}}
+
+
+def parse_cache_time(value: str | None) -> dt.datetime:
+    if not value:
+        return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+    try:
+        parsed = dt.datetime.fromisoformat(value)
+    except ValueError:
+        return dt.datetime.min.replace(tzinfo=dt.timezone.utc)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=dt.timezone.utc)
+    return parsed.astimezone(dt.timezone.utc)
+
+
+def prune_cache(cache: dict[str, Any], max_entries: int, ttl_days: int) -> int:
+    entries = cache.setdefault("entries", {})
+    original_count = len(entries)
+    if ttl_days > 0:
+        cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=ttl_days)
+        for key, value in list(entries.items()):
+            updated_at = value.get("updated_at") if isinstance(value, dict) else None
+            if parse_cache_time(updated_at) < cutoff:
+                entries.pop(key, None)
+    if max_entries > 0 and len(entries) > max_entries:
+        sorted_items = sorted(
+            entries.items(),
+            key=lambda item: parse_cache_time(item[1].get("updated_at") if isinstance(item[1], dict) else None),
+            reverse=True,
+        )
+        keep = {key for key, _value in sorted_items[:max_entries]}
+        for key in list(entries):
+            if key not in keep:
+                entries.pop(key, None)
+    return original_count - len(entries)
 
 
 def gate_status(
@@ -640,6 +710,7 @@ def write_llm_packet(path: Path, payload: dict[str, Any], top_candidates: list[F
 
 
 def scan(args: argparse.Namespace) -> int:
+    validate_encoding(args.encoding)
     repo_root = Path(args.root).resolve()
     search_root = repo_root
     if args.module_path:
@@ -651,7 +722,7 @@ def scan(args: argparse.Namespace) -> int:
 
     include_globs = args.include_glob or DEFAULT_INCLUDE_GLOBS
     exclude_globs = DEFAULT_EXCLUDE_GLOBS + (args.exclude_glob or [])
-    raw_matches = run_rg(search_root, args.symbol, include_globs, exclude_globs)
+    raw_matches = run_rg(search_root, args.symbol, include_globs, exclude_globs, args.encoding)
     filtered_matches = [match for match in raw_matches if not is_noise_line(match.line)]
     definition_abs = resolve_path(args.definition_file, repo_root, search_root)
     candidates = rank_candidates(
@@ -662,6 +733,7 @@ def scan(args: argparse.Namespace) -> int:
         owner_package=args.owner_package,
         definition_abs=definition_abs,
         context_lines=args.context_lines,
+        source_encoding=args.encoding,
     )
     top_candidates = candidates[: args.max_candidates]
     status, reasons = gate_status(
@@ -684,6 +756,7 @@ def scan(args: argparse.Namespace) -> int:
         definition_file=args.definition_file,
         definition_abs=definition_abs,
         candidates=top_candidates,
+        source_encoding=args.encoding,
     )
     cache = load_cache(cache_file)
     cache_status = "hit" if cache.get("entries", {}).get(cache_key) else "miss"
@@ -699,6 +772,7 @@ def scan(args: argparse.Namespace) -> int:
             "root": str(repo_root),
             "search_root": str(search_root),
             "module_path": args.module_path,
+            "encoding": args.encoding,
         },
         "gate": {"status": status, "reasons": reasons},
         "counts": {
@@ -740,8 +814,11 @@ def cache_put(args: argparse.Namespace) -> int:
         "confidence": args.confidence,
         "verdict": verdict_text,
     }
+    removed = prune_cache(cache, args.cache_max_entries, args.cache_ttl_days)
     write_json(cache_file, cache)
     print(f"stored cache entry {args.key} in {cache_file}")
+    if removed:
+        print(f"pruned {removed} old cache entries")
     return 0
 
 
@@ -762,6 +839,11 @@ def build_parser() -> argparse.ArgumentParser:
     scan_parser.add_argument("--context-lines", type=int, default=6, help="Context lines around each match")
     scan_parser.add_argument("--raw-limit", type=int, default=1000, help="Hard raw-match breaker")
     scan_parser.add_argument("--generic-limit", type=int, default=200, help="Breaker for generic symbols without owner info")
+    scan_parser.add_argument(
+        "--encoding",
+        default=DEFAULT_ENCODING,
+        help="Source file encoding for rg and snippet extraction; use 'auto' to let rg use its default detection",
+    )
     scan_parser.add_argument("--include-glob", action="append", help="Override include glob; repeatable")
     scan_parser.add_argument("--exclude-glob", action="append", help="Additional rg exclude glob; repeatable")
     scan_parser.add_argument("--fail-on-refine", action="store_true", help="Exit 2 when gate is REFINE_REQUIRED")
@@ -773,6 +855,8 @@ def build_parser() -> argparse.ArgumentParser:
     cache_parser.add_argument("--target", default=None)
     cache_parser.add_argument("--confidence", choices=["high", "medium", "low"], default="medium")
     cache_parser.add_argument("--verdict-file", default=None, help="Markdown/JSON verdict file; stdin if omitted")
+    cache_parser.add_argument("--cache-max-entries", type=int, default=500, help="Maximum cache entries to retain; 0 disables")
+    cache_parser.add_argument("--cache-ttl-days", type=int, default=0, help="Prune entries older than this many days; 0 disables")
     cache_parser.set_defaults(func=cache_put)
 
     return parser

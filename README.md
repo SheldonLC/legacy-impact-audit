@@ -2,7 +2,7 @@
 
 `legacy-impact-audit` is a Codex skill and deterministic helper toolkit for low-token impact analysis in legacy Java or mixed enterprise repositories.
 
-Current version: `0.2.3`
+Current version: `0.2.4`
 
 It is designed for repositories where full dependency graphs are unavailable, stale, too expensive to build, or unreliable for daily change work.
 
@@ -115,7 +115,8 @@ python3 "$HOME/.codex/skills/legacy-impact-audit/scripts/impact_audit.py" scan \
   --symbol METHOD_NAME \
   --owner-class OWNER_CLASS \
   --owner-package com.example.package \
-  --definition-file path/to/OwnerClass.java
+  --definition-file path/to/OwnerClass.java \
+  --encoding utf-8
 ```
 
 Outputs:
@@ -175,8 +176,9 @@ This requires `.ai/legacy-impact-audit/semantic-verdict.md` to exist.
 
 - Installation: Python is optional. Use `portable/install-kit.py`, `portable/install-kit.sh`, `portable/install-kit.ps1`, or manual copy.
 - Audit execution: Python 3.10 or newer is recommended.
-- Search: `rg` / ripgrep must be available in PATH.
+- Search: `rg` / ripgrep must be available in PATH. Run `rg --version` before first use on a fresh machine.
 - Git is required for validator diff modes.
+- Mixed-encoding repositories can pass `--encoding`, for example `--encoding utf-8`, `--encoding gbk`, or `--encoding auto`.
 
 ## License
 
