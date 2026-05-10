@@ -20,15 +20,15 @@ const PACKAGE_ROOT = path.resolve(__dirname);
 const SKILL_SOURCE = path.join(PACKAGE_ROOT, SKILL_NAME);
 const IS_NPM_GLOBAL = isNpmGlobal();
 
-// Agent skill target directories (user scope)
+// Agent skill target directories (user scope), with a check path for detection
 const USER_TARGETS = [
-  { name: "opencode", skillDir: path.join(osHome(), ".config", "opencode", "skills", SKILL_NAME) },
-  { name: "codex", skillDir: path.join(
+  { name: "opencode", checkDir: path.join(osHome(), ".config", "opencode"), skillDir: path.join(osHome(), ".config", "opencode", "skills", SKILL_NAME) },
+  { name: "codex", checkDir: process.env.CODEX_HOME ? process.env.CODEX_HOME : path.join(osHome(), ".codex"), skillDir: path.join(
       process.env.CODEX_HOME ? process.env.CODEX_HOME : path.join(osHome(), ".codex"),
       "skills", SKILL_NAME
     ),
   },
-  { name: "claude", skillDir: path.join(osHome(), ".claude", "skills", SKILL_NAME) },
+  { name: "claude", checkDir: path.join(osHome(), ".claude"), skillDir: path.join(osHome(), ".claude", "skills", SKILL_NAME) },
 ];
 
 function osHome() {
@@ -152,10 +152,8 @@ function main() {
 
   // Detect active agent(s) and install
   const found = USER_TARGETS.filter(t => {
-    // Check if the agent config dir exists on this machine
-    const parent = path.dirname(t.skillDir);
-    return fs.existsSync(path.dirname(parent)) || // ~/.config/opencode exists
-           fs.existsSync(parent);                   // ~/.config/opencode/skills exists
+    // Check if the agent's root config directory exists on this machine
+    return fs.existsSync(t.checkDir);
   });
 
   if (found.length === 0) {

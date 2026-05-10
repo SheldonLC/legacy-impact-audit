@@ -1,8 +1,16 @@
 # legacy-impact-audit
 
+[![npm](https://img.shields.io/npm/v/legacy-impact-audit)](https://www.npmjs.com/package/legacy-impact-audit)
+[![npm downloads](https://img.shields.io/npm/dm/legacy-impact-audit)](https://www.npmjs.com/package/legacy-impact-audit)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+
 `legacy-impact-audit` is a Codex skill and deterministic helper toolkit for low-token impact analysis in legacy Java or mixed enterprise repositories.
 
-Current version: `0.2.4`
+```bash
+npm install -g legacy-impact-audit
+```
+
+Current version: `0.2.5`
 
 It is designed for repositories where full dependency graphs are unavailable, stale, too expensive to build, or unreliable for daily change work.
 
@@ -58,16 +66,25 @@ VERSION
 
 ## Install
 
-Python is not required for installation. It is required later to run the deterministic audit scripts.
-
-### npm (recommended)
-
 ```bash
 npm install -g legacy-impact-audit
-legacy-impact-audit install            # auto-detect agent (opencode, codex, or claude)
-legacy-impact-audit install --agent opencode  # explicit agent
-legacy-impact-audit install --project .      # project scope
-legacy-impact-audit update                   # re-install to latest
+```
+
+The postinstall script auto-detects your agent (OpenCode, Codex, or Claude Code) and installs the skill. Done.
+
+Prerequisites: `python` (or `python3`) and `ripgrep` (`rg`) must be available in PATH.
+
+### Project scope
+
+```bash
+legacy-impact-audit install --project .
+```
+
+This writes an `AGENTS.md` instruction block and installs the skill into `.opencode/skills/`.
+
+### Alternative installers
+
+Python is not required for installation. It is required later to run the deterministic audit scripts.
 legacy-impact-audit version                  # show version
 ```
 
