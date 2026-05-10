@@ -28,6 +28,8 @@ jobs:
 
       - name: Compile scripts
         run: |
+          bash -n portable/install-kit.sh
+          bash -n legacy-impact-audit/scripts/sensitive-scan-gate.sh
           python3 -m py_compile \
             legacy-impact-audit/scripts/impact_audit.py \
             legacy-impact-audit/scripts/validate_impact_audit.py \
