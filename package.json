@@ -1,6 +1,6 @@
 {
   "name": "legacy-impact-audit",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Low-token impact audit for legacy Java repositories. Install as an OpenCode, Codex, or Claude Code skill.",
   "keywords": [
     "opencode",
