@@ -29,7 +29,41 @@ const USER_TARGETS = [
     ),
   },
   { name: "claude", checkDir: path.join(osHome(), ".claude"), skillDir: path.join(osHome(), ".claude", "skills", SKILL_NAME) },
+  { name: "copilot", checkDir: path.join(osHome(), ".copilot"), skillDir: path.join(osHome(), ".copilot", "skills", SKILL_NAME) },
+  { name: "deepcode", checkDir: path.join(osHome(), ".agents"), skillDir: path.join(osHome(), ".agents", "skills", SKILL_NAME) },
+  { name: "gemini", checkDir: path.join(osHome(), ".gemini"), skillDir: path.join(osHome(), ".gemini", "skills", SKILL_NAME) },
 ];
+
+// â”€â”€ Agent capabilities matrix â”€â”€
+// What each agent gets during install (user scope).
+//   instruction: write a marked block to the agent's global config
+//   skill:       copy skill files to the agent's skill directory
+//   hook:        install a coding-agent hook (post-tool-edit audit reminder)
+//
+//   Hook types:
+//     "opencode-plugin" â†?copies audit-reminder.js to plugins/ directory
+//     false             â†?no hook available (relies on instruction block)
+//
+//   TODO: codex  â†?"codex-hook" (format TBD)
+//   TODO: copilot â†?"copilot-hook" (format TBD)
+const AGENT_CAPABILITIES = {
+  opencode: { instruction: true, skill: true, hook: "opencode-plugin" },
+  codex:    { instruction: true, skill: true, hook: "codex-session-hook" },
+  claude:   { instruction: true, skill: true, hook: false },
+  copilot:  { instruction: true, skill: true, hook: false },
+  gemini:   { instruction: true, skill: true, hook: false },
+  deepcode: { instruction: true, skill: true, hook: false },
+};
+
+// Instruction file targets per agent (for project scope installs)
+const INSTRUCTION_TARGETS = {
+  opencode: "AGENTS.md",
+  codex: "AGENTS.md",
+  claude: "CLAUDE.md",
+  copilot: path.join(".github", "copilot-instructions.md"),
+  gemini: "GEMINI.md",
+  deepcode: path.join(".deepcode", "instructions.md"),
+};
 
 function osHome() {
   return process.env.HOME || process.env.USERPROFILE || ".";
@@ -157,7 +191,7 @@ function main() {
   });
 
   if (found.length === 0) {
-    // No known agent found â€” try default (opencode)
+    // No known agent found â€?try default (opencode)
     const target = USER_TARGETS.find(t => t.name === "opencode");
     if (target) {
       fs.mkdirSync(path.dirname(target.skillDir), { recursive: true });
@@ -168,14 +202,230 @@ function main() {
   }
 
   for (const target of found) {
-    const parent = path.dirname(target.skillDir);
-    fs.mkdirSync(parent, { recursive: true });
-    copyRecursive(SKILL_SOURCE, target.skillDir);
-    console.log(`[legacy-impact-audit] Installed for ${target.name}: ${target.skillDir}`);
+    const caps = AGENT_CAPABILITIES[target.name] || { instruction: true, skill: true, hook: false };
+
+    // 1. Copy skill files
+    if (caps.skill) {
+      const parent = path.dirname(target.skillDir);
+      fs.mkdirSync(parent, { recursive: true });
+      copyRecursive(SKILL_SOURCE, target.skillDir);
+      console.log(`[legacy-impact-audit] Installed for ${target.name}: ${target.skillDir}`);
+    }
+
+    // 2. Write agent instruction block (AGENTS.md / CLAUDE.md / etc.)
+    if (caps.instruction) {
+      writeAgentHook(target);
+    }
+
+    // 3. Install coding-agent hook (post-tool-edit audit reminder)
+    if (caps.hook) {
+      installAgentHook(target, caps.hook);
+    }
   }
 
   console.log("[legacy-impact-audit] Prerequisites: python (or python3) and ripgrep (rg) must be in PATH.");
   console.log("[legacy-impact-audit] For project scope: `legacy-impact-audit install --project ./repo`.");
+}
+
+// â”€â”€ Agent instruction hooks â”€â”€
+// Writes a block to each agent's global config telling the agent to run the
+// impact audit before touching legacy Java code. Idempotent (marked block).
+
+function writeAgentHook(target) {
+  // Map agent to its global instruction file
+  const INSTRUCTION_FILES = {
+    opencode: path.join(target.checkDir, "AGENTS.md"),
+    codex: path.join(target.checkDir, "AGENTS.md"),
+    claude: path.join(target.checkDir, "CLAUDE.md"),
+    copilot: path.join(target.checkDir, "copilot-instructions.md"),
+    gemini: path.join(target.checkDir, "GEMINI.md"),
+    deepcode: path.join(target.checkDir, "AGENTS.md"),
+  };
+
+  const instructionFile = INSTRUCTION_FILES[target.name];
+  if (!instructionFile) return;
+
+  // Skill path relative to the installed location
+  const scriptPath = target.skillDir.replace(/\\/g, "/");
+  const block = `\
+<!-- legacy-impact-audit:start -->
+## Legacy Impact Audit
+
+### When to Run
+Run ONLY when making code changes: implementing, fixing, refactoring, modifying
+behavior, changing method signatures, DTO/table/query shapes, or public APIs.
+Do NOT trigger on: querying, debugging (read-only), investigating, explaining.
+
+### Plan-First Gate
+Before ANY code change: plan â†?review â†?confirm â†?audit â†?implement.
+Use plan/brainstorm/ask-me/grill to validate the approach first.
+
+### Mandatory Triggers
+service methods, public APIs, shared utilities, job entry points, workflow
+logic, DAO/query/persistence, DTO/table/JSON, financial calculation, scoring,
+approval, reconciliation, core business logic.
+
+### Gate Rules
+- Do not proceed if audit returns \`REFINE_REQUIRED\`.
+- Do not feed raw search results to LLM; use the generated report.
+- Test/regression scope from \`real_dependency\` and \`possible_dependency\`.
+
+\`\`\`bash
+python3 "${scriptPath}/scripts/impact_audit.py" scan \\
+  --root . --symbol METHOD_NAME --owner-class OWNER_CLASS \\
+  --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java
+\`\`\`
+<!-- legacy-impact-audit:end -->`;
+
+  const dir = path.dirname(instructionFile);
+  fs.mkdirSync(dir, { recursive: true });
+  let existing = "";
+  if (fs.existsSync(instructionFile)) {
+    existing = fs.readFileSync(instructionFile, "utf-8");
+  }
+  // Idempotent: replace or append the marked block
+  const startIdx = existing.indexOf("<!-- legacy-impact-audit:start -->");
+  const endIdx = existing.indexOf("<!-- legacy-impact-audit:end -->");
+  let content;
+  if (startIdx !== -1 && endIdx !== -1) {
+    const before = existing.substring(0, startIdx).trimEnd();
+    const after = existing.substring(endIdx + "<!-- legacy-impact-audit:end -->".length).trimStart();
+    content = `${before}\n\n${block.trim()}\n\n${after}\n`;
+  } else {
+    content = `${existing.trimEnd()}\n\n${block.trim()}\n`;
+  }
+  fs.writeFileSync(instructionFile, content, "utf-8");
+  console.log(`[legacy-impact-audit]   Agent hook: ${instructionFile}`);
+}
+
+// â”€â”€ Coding-agent hooks (per agent type) â”€â”€
+
+function installAgentHook(target, hookType) {
+  switch (hookType) {
+    case "opencode-plugin":
+      installOpenCodePlugin(target);
+      break;
+    case "codex-session-hook":
+      installCodexSessionHook(target);
+      break;
+    // TODO: case "copilot-hook": installCopilotHook(target); break;
+  }
+}
+
+function installCodexSessionHook(target) {
+  const hookScript = path.join(target.skillDir, "scripts", "codex-session-start-hook.py");
+  const hookConfig = path.join(target.checkDir, "hooks.json");
+  const configToml = path.join(target.checkDir, "config.toml");
+
+  // 1. Register the SessionStart hook in hooks.json
+  let hooksConfig = {};
+  if (fs.existsSync(hookConfig)) {
+    try { hooksConfig = JSON.parse(fs.readFileSync(hookConfig, "utf-8")); } catch (_) {}
+  }
+  const hooks = hooksConfig.hooks || {};
+  hooks.SessionStart = [
+    {
+      matcher: "startup",
+      hooks: [
+        {
+          type: "command",
+          command: `python3 "${hookScript.replace(/\\/g, '/')}"`,
+          timeout: 10,
+          statusMessage: "Running impact audit reminder...",
+        },
+      ],
+    },
+  ];
+  // Merge with existing config (preserve other events)
+  hooksConfig.hooks = { ...hooksConfig.hooks, ...hooks };
+  fs.writeFileSync(hookConfig, JSON.stringify(hooksConfig, null, 2), "utf-8");
+  console.log(`[legacy-impact-audit]   Hook (codex-session): ${hookConfig}`);
+
+  // 2. Enable hooks feature in config.toml
+  let toml = "";
+  if (fs.existsSync(configToml)) {
+    toml = fs.readFileSync(configToml, "utf-8");
+  }
+  if (!toml.includes("hooks = true")) {
+    if (toml.includes("[features]")) {
+      toml = toml.replace("[features]", "[features]\nhooks = true");
+    } else {
+      toml = toml.trimEnd() + "\n\n[features]\nhooks = true\n";
+    }
+    fs.writeFileSync(configToml, toml, "utf-8");
+    console.log(`[legacy-impact-audit]   Enabled hooks in ${configToml}`);
+  }
+}
+
+function installOpenCodePlugin(target) {
+  const pluginSrc = path.join(SKILL_SOURCE, "opencode-hooks", "audit-reminder.js");
+  const pluginDir = path.join(target.checkDir, "plugins");
+  const pluginDest = path.join(pluginDir, "legacy-impact-audit.js");
+
+  if (!fs.existsSync(pluginSrc)) return;
+  fs.mkdirSync(pluginDir, { recursive: true });
+  fs.copyFileSync(pluginSrc, pluginDest);
+  console.log(`[legacy-impact-audit]   Hook (opencode-plugin): ${pluginDest}`);
+}
+
+function installCodexSessionHook(target) {
+  // Write ~/.codex/hooks.json with SessionStart hook that injects audit context
+  const hooksJsonPath = path.join(target.checkDir, "hooks.json");
+  const hookScriptPath = path.join(target.skillDir, "scripts", "codex-session-start-hook.py")
+    .replace(/\\/g, "/");
+
+  const hooksConfig = {
+    hooks: {
+      SessionStart: [
+        {
+          matcher: "startup|resume",
+          hooks: [
+            {
+              type: "command",
+              command: `python3 "${hookScriptPath}"`,
+              timeout: 5,
+            },
+          ],
+        },
+      ],
+    },
+  };
+
+  // Merge with existing hooks.json if present
+  let existing = {};
+  if (fs.existsSync(hooksJsonPath)) {
+    try { existing = JSON.parse(fs.readFileSync(hooksJsonPath, "utf-8")); } catch (_) {}
+  }
+
+  // Deep merge: add our SessionStart without overwriting other events
+  if (!existing.hooks) existing.hooks = {};
+  existing.hooks.SessionStart = [
+    ...(existing.hooks.SessionStart || []),
+    ...hooksConfig.hooks.SessionStart,
+  ];
+
+  fs.mkdirSync(path.dirname(hooksJsonPath), { recursive: true });
+  fs.writeFileSync(hooksJsonPath, JSON.stringify(existing, null, 2), "utf-8");
+  console.log(`[legacy-impact-audit]   Hook (codex-session-hook): ${hooksJsonPath}`);
+
+  // Ensure hooks is enabled in config.toml (idempotent)
+  ensureCodexHooksEnabled(target.checkDir);
+}
+
+function ensureCodexHooksEnabled(codexDir) {
+  const configPath = path.join(codexDir, "config.toml");
+  let config = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf-8") : "";
+
+  // Check if hooks feature is already enabled
+  if (/hooks\s*=\s*true/.test(config)) return;
+
+  // Add [features] section with hooks = true
+  if (config.includes("[features]")) {
+    config = config.replace(/\[features\]/, "[features]\nhooks = true");
+  } else {
+    config += "\n[features]\nhooks = true\n";
+  }
+  fs.writeFileSync(configPath, config, "utf-8");
 }
 
 main();

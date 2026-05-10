@@ -9,6 +9,20 @@ description: Low-token impact audit for legacy Java or mixed enterprise reposito
 
 Run a cheap-to-expensive impact funnel before editing risky legacy code. Prefer deterministic search and ranking first; call the LLM only on a small candidate packet.
 
+## Trigger Scope
+
+This skill fires ONLY during code-change workflows:
+- Implementing, fixing, refactoring, modifying behavior
+- Changing method signatures, DTO/table/query shapes, or public APIs
+
+It does NOT fire on read-only operations: querying, debugging (without code changes), investigating, explaining, case checking.
+
+## Plan-First Gate
+
+Before any code change: plan â†?review â†?confirm â†?audit â†?implement.
+Use plan / brainstorm / ask-me / grill skills to validate the approach.
+Do not touch code until the plan is confirmed.
+
 ## Required Workflow
 
 1. Identify the target symbol: method name, owner class, package, file path, and intended change type.
@@ -127,7 +141,9 @@ Every impact analysis should include:
 
 - Target method/class/package and intended change.
 - Raw match count, filtered match count, candidate file count, and gate status.
-- Top candidate table with score, priority, file, line numbers, and reasons.
+- **Blast Radius** tree diagram grouping candidates by module with risk indicators (ðŸ”´ HIGH, ðŸŸ¡ MEDIUM, âš?LOW).
+- **Module Summary** table showing affected modules, file counts, and risk distribution.
+- Top candidate table with score, priority, risk emoji, module, file, line numbers, and reasons.
 - LLM semantic verdicts: `real_dependency`, `possible_dependency`, `not_dependency`, or `needs_manual_check`.
 - L1-only or L2-expanded scope decision.
 - Recommended regression tests and manual checks.

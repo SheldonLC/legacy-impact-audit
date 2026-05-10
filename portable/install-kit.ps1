@@ -13,6 +13,16 @@ $ErrorActionPreference = "Stop"
 $SkillName = "legacy-impact-audit"
 $MarkerStart = "<!-- legacy-impact-audit:start -->"
 $MarkerEnd = "<!-- legacy-impact-audit:end -->"
+
+# Per-agent instruction file (written in project scope)
+$InstructionFiles = @{
+    codex    = "AGENTS.md"
+    opencode = "AGENTS.md"
+    claude   = "CLAUDE.md"
+    gemini   = "GEMINI.md"
+    copilot  = ".github/copilot-instructions.md"
+    deepcode = ".deepcode/instructions.md"
+}
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $KitRoot = Resolve-Path (Join-Path $ScriptDir "..")
 
@@ -81,29 +91,41 @@ function New-InstructionBlock {
 $MarkerStart
 ## Legacy Impact Audit
 
-Before planning or implementing risky legacy Java changes, run a legacy impact audit.
+### When to Run (trigger scope)
 
-Mandatory triggers:
-- service methods, public APIs, shared utilities, job entry points, workflow logic
-- DAO/query/persistence behavior, DTO/table/JSON contracts
-- financial calculation, scoring, approval, reconciliation, workflow, or other core business logic
+Run the impact audit ONLY when making code changes: implementing, fixing,
+refactoring, modifying behavior, changing method signatures, DTO/table/query
+shapes, or public APIs.
 
-Gate rules:
-- Run impact audit before finalizing the implementation plan.
-- Run it again after code changes and before functional test case design or code review.
-- Do not proceed if the audit returns ``REFINE_REQUIRED``; narrow by owner class, package, module, or definition file first.
-- Do not ask an LLM to analyze broad raw search results; use the generated audit report and packet.
-- Test scope and regression scope must be derived from confirmed ``real_dependency`` and ``possible_dependency`` candidates.
+Do NOT trigger on: querying, debugging (read-only), investigating, explaining,
+case checking, or any task that does not produce a code diff.
 
-Command pattern:
+### Plan-First Gate
+
+Before ANY code change: plan -> audit -> review -> confirm -> implement.
+Use plan / brainstorm / ask-me / grill skills to validate the approach.
+Do not touch code until the plan is confirmed.
+
+### Mandatory Triggers
+
+When changing: service methods, public APIs, shared utilities, job entry points,
+workflow logic, DAO/query/persistence, DTO/table/JSON contracts, financial
+calculation, scoring, approval, reconciliation, or core business logic.
+
+### Gate Rules
+
+- Run audit before finalizing the plan and again before code review.
+- Do not proceed if audit returns ${Fence}REFINE_REQUIRED${Fence}; narrow by
+  owner class, package, module, or definition file.
+- Do not feed raw search results to an LLM; use the generated report.
+- Test/regression scope derives from real_dependency and possible_dependency.
+
+### Command
 
 ${Fence}bash
 python3 "$ScriptPath" scan \
-  --root . \
-  --symbol METHOD_NAME \
-  --owner-class OWNER_CLASS \
-  --owner-package OWNER_PACKAGE \
-  --definition-file path/to/OwnerClass.java
+  --root . --symbol METHOD_NAME --owner-class OWNER_CLASS \
+  --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java
 ${Fence}
 $MarkerEnd
 "@
@@ -171,46 +193,25 @@ function Get-ProjectParent {
 function Install-Agent {
     param([string]$Name)
 
-    if ($Name -eq "codex" -and -not [string]::IsNullOrWhiteSpace($SkillsDir)) {
-        $installed = Copy-Skill -SourcePath $Source -DestinationParent $SkillsDir
-        Write-Output "Installed/updated: $installed"
-        return
-    }
-
-    if ($Name -eq "gemini") {
-        if ($Scope -eq "user") {
-            $installed = Copy-Skill -SourcePath $Source -DestinationParent (Join-Path $HOME ".agents/skills")
-            $geminiFile = Join-Path $HOME ".gemini/GEMINI.md"
-            Add-MarkedBlock -Path $geminiFile -ScriptPath (Join-Path $installed "scripts/impact_audit.py")
-            Write-Output "Installed/updated: $installed"
-            Write-Output "Installed/updated: $geminiFile"
-        } else {
-            $installed = Copy-Skill -SourcePath $Source -DestinationParent (Join-Path $ProjectRoot ".ai/legacy-impact-audit/skills")
-            $geminiFile = Join-Path $ProjectRoot "GEMINI.md"
-            Add-MarkedBlock -Path $geminiFile -ScriptPath (Join-Path $installed "scripts/impact_audit.py")
-            Write-Output "Installed/updated: $installed"
-            Write-Output "Installed/updated: $geminiFile"
-        }
-        return
-    }
-
+    # User scope: copy skill only
     if ($Scope -eq "user") {
-        $installed = Copy-Skill -SourcePath $Source -DestinationParent (Get-UserParent -Name $Name)
+        $parent = if ($SkillsDir) { $SkillsDir } else { Get-UserParent -Name $Name }
+        $installed = Copy-Skill -SourcePath $Source -DestinationParent $parent
         Write-Output "Installed/updated: $installed"
         return
     }
 
-    $installed = Copy-Skill -SourcePath $Source -DestinationParent (Get-ProjectParent -Name $Name)
+    # Project scope: copy skill + write instruction file
+    $parent = Get-ProjectParent -Name $Name
+    $installed = Copy-Skill -SourcePath $Source -DestinationParent $parent
     Write-Output "Installed/updated: $installed"
 
-    if ($Name -eq "opencode") {
-        $agentsFile = Join-Path $ProjectRoot "AGENTS.md"
-        Add-MarkedBlock -Path $agentsFile -ScriptPath (Join-Path $installed "scripts/impact_audit.py")
-        Write-Output "Installed/updated: $agentsFile"
-    } elseif ($Name -eq "copilot") {
-        $copilotFile = Join-Path $ProjectRoot ".github/copilot-instructions.md"
-        Add-MarkedBlock -Path $copilotFile -ScriptPath (Join-Path $installed "scripts/impact_audit.py")
-        Write-Output "Installed/updated: $copilotFile"
+    $file = $InstructionFiles[$Name]
+    if ($file) {
+        $path = Join-Path $ProjectRoot $file
+        $scriptPath = Join-Path $installed "scripts/impact_audit.py"
+        Add-MarkedBlock -Path $path -ScriptPath $scriptPath
+        Write-Output "Installed/updated: $path"
     }
 }
 

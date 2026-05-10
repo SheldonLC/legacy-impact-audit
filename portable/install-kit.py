@@ -62,29 +62,30 @@ def instruction_block(script_path: str) -> str:
 {MARKER_START}
 ## Legacy Impact Audit
 
-Before planning or implementing risky legacy Java changes, run a legacy impact audit.
+### When to Run
+Run ONLY when making code changes: implementing, fixing, refactoring, modifying
+behavior, changing method signatures, DTO/table/query shapes, or public APIs.
+Do NOT trigger on: querying, debugging (read-only), investigating, explaining.
 
-Mandatory triggers:
-- service methods, public APIs, shared utilities, job entry points, workflow logic
-- DAO/query/persistence behavior, DTO/table/JSON contracts
-- financial calculation, scoring, approval, reconciliation, workflow, or other core business logic
+### Plan-First Gate
+Before ANY code change: plan -> audit -> review -> confirm -> implement.
+Use plan/brainstorm/ask-me/grill to validate the approach first.
 
-Gate rules:
-- Run impact audit before finalizing the implementation plan.
-- Run it again after code changes and before functional test case design or code review.
-- Do not proceed if the audit returns `REFINE_REQUIRED`; narrow by owner class, package, module, or definition file first.
-- Do not ask an LLM to analyze broad raw search results; use the generated audit report and packet.
-- Test scope and regression scope must be derived from confirmed `real_dependency` and `possible_dependency` candidates.
+### Mandatory Triggers
+service methods, public APIs, shared utilities, job entry points, workflow
+logic, DAO/query/persistence, DTO/table/JSON, financial calculation, scoring,
+approval, reconciliation, core business logic.
 
-Command pattern:
+### Gate Rules
+- Do not proceed if audit returns `REFINE_REQUIRED`.
+- Do not feed raw search results to LLM; use the generated report.
+- Test/regression scope from `real_dependency` and `possible_dependency`.
 
+### Command
 ```bash
 python3 "{script_path}" scan \\
-  --root . \\
-  --symbol METHOD_NAME \\
-  --owner-class OWNER_CLASS \\
-  --owner-package OWNER_PACKAGE \\
-  --definition-file path/to/OwnerClass.java
+  --root . --symbol METHOD_NAME --owner-class OWNER_CLASS \\
+  --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java
 ```
 {MARKER_END}
 """

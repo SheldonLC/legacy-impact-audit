@@ -584,7 +584,37 @@ def md_escape(value: Any) -> str:
     return str(value).replace("|", "\\|").replace("\n", " ")
 
 
-def write_report(path: Path, payload: dict[str, Any], top_candidates: list[FileCandidate]) -> None:
+def extract_module(file_path: str, search_root: Path) -> str:
+    """Extract the top-level module name from a file path relative to search_root."""
+    try:
+        rel = Path(file_path).relative_to(search_root)
+        parts = rel.parts
+        if parts:
+            return parts[0]
+    except (ValueError, OSError):
+        pass
+    return "unknown"
+
+
+def risk_emoji(priority: str) -> str:
+    """Return a risk emoji for a priority tier."""
+    return {"HIGH": "🔴", "MEDIUM": "🟡", "LOW": "⚪", "BACKGROUND": "⚫"}.get(priority, "")
+
+
+_PRIORITY_ORDER = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "BACKGROUND": 3}
+
+def _module_sort_key(item: tuple[str, int, int]) -> tuple[int, int, int, str]:
+    """Sort modules: highest risk first, then by call count desc, then module name."""
+    module, count, worst_priority = item
+    return (worst_priority, -count, module)
+
+
+def write_report(
+    path: Path,
+    payload: dict[str, Any],
+    top_candidates: list[FileCandidate],
+    search_root: Path | None = None,
+) -> None:
     target = payload["target"]
     gate = payload["gate"]
     cache = payload["cache"]
@@ -628,17 +658,92 @@ def write_report(path: Path, payload: dict[str, Any], top_candidates: list[FileC
             ]
         )
 
+    if search_root is not None:
+        for item in top_candidates:
+            item._module = extract_module(item.path, search_root)
+    else:
+        for item in top_candidates:
+            item._module = ""
+
+    # ── Blast Radius Summary (module grouping) ──
+    if top_candidates and any(getattr(c, "_module", "") for c in top_candidates):
+        module_counts: dict[str, int] = {}
+        module_best: dict[str, int] = {}
+        module_high: dict[str, int] = {}
+        for c in top_candidates:
+            module_name = getattr(c, "_module", "")
+            if not module_name:
+                continue
+            module_counts[module_name] = module_counts.get(module_name, 0) + 1
+            module_high[module_name] = module_high.get(module_name, 0) + (1 if c.priority == "HIGH" else 0)
+            current_best = module_best.get(module_name, _PRIORITY_ORDER.get("BACKGROUND", 99))
+            module_best[module_name] = min(current_best, _PRIORITY_ORDER.get(c.priority, 99))
+
+        sorted_modules = sorted(
+            [(m, module_counts[m], module_best[m], module_high[m]) for m in module_counts],
+            key=lambda x: (x[2], -x[1], x[0]),
+        )
+
+        lines.extend([
+            "",
+            "## Blast Radius",
+            "",
+            f"**{len(sorted_modules)} module(s)** affected. {len(top_candidates)} candidate file(s) total.",
+            "",
+        ])
+
+        # ASCII tree
+        source_module = extract_module(target.get("definition_file", ""), search_root) if target.get("definition_file") else ""
+        if source_module:
+            root_label = f"{source_module} (source)"
+        else:
+            root_label = target.get("owner_class", "Source")
+
+        lines.append("```text")
+        lines.append(root_label)
+        for idx, (module_name, count, worst_pri, high_count) in enumerate(sorted_modules):
+            is_last = idx == len(sorted_modules) - 1
+            prefix = " └── " if is_last else " ├── "
+            emoji = ""
+            for pri_name, pri_val in _PRIORITY_ORDER.items():
+                if worst_pri == pri_val:
+                    emoji = risk_emoji(pri_name)
+                    break
+            extra = f" ({count} file" + ("s" if count > 1 else "") + f", {high_count} HIGH)" if high_count > 0 else f" ({count} file" + ("s" if count > 1 else "") + ")"
+            lines.append(f"{prefix}{emoji} {module_name}{extra}")
+        lines.append("```")
+        lines.append("")
+
+        # Module summary table
+        lines.extend([
+            "### Module Summary",
+            "",
+            "| Module | Files | HIGH | Risk |",
+            "| --- | ---: | ---: | --- |",
+        ])
+        for module_name, count, worst_pri, high_count in sorted_modules:
+            emoji = ""
+            for pri_name, pri_val in _PRIORITY_ORDER.items():
+                if worst_pri == pri_val:
+                    emoji = risk_emoji(pri_name)
+                    break
+            lines.append(f"| {module_name} | {count} | {high_count} | {emoji} |")
+        lines.append("")
+
+    # ── Ranked Candidates Table ──
     lines.extend(
         [
             "## Ranked Candidates",
             "",
-            "| Rank | Priority | Score | File | Lines | Reasons |",
-            "| ---: | --- | ---: | --- | --- | --- |",
+            "| Rank | Risk | Score | Module | File | Lines | Reasons |",
+            "| ---: | --- | ---: | --- | --- | --- | --- |",
         ]
     )
     for index, item in enumerate(top_candidates, start=1):
+        module_name = getattr(item, "_module", "")
         lines.append(
-            f"| {index} | {item.priority} | {item.score} | `{md_escape(item.path)}` | "
+            f"| {index} | {risk_emoji(item.priority)} {item.priority} | {item.score} |"
+            f" {module_name} | `{md_escape(item.path)}` | "
             f"{md_escape(','.join(str(x) for x in item.match_lines[:8]))} | "
             f"{md_escape(', '.join(item.reasons))} |"
         )
@@ -789,7 +894,7 @@ def scan(args: argparse.Namespace) -> int:
     report_md = output_dir / "impact-report.md"
     packet_md = output_dir / "llm-packet.md"
     write_json(scan_json, payload)
-    write_report(report_md, payload, top_candidates)
+    write_report(report_md, payload, top_candidates, search_root)
     write_llm_packet(packet_md, payload, top_candidates)
 
     print(f"gate={status}")

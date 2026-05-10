@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.2.8
+
+- Add copilot, deepcode, and gemini agent targets to npm install CLI and postinstall.
+- Add instruction file support for all 6 agents (AGENTS.md, CLAUDE.md, GEMINI.md, etc.).
+- Add `--hooks` flag to install pre-commit hook in project scope (opt-in).
+- Graceful skip when `.git/hooks` doesn't exist.
+
+## 0.2.7
+
+- Add blast radius summary with ASCII tree diagram grouping candidates by module.
+- Add risk indicators (🔴🟡⚪⚫) to priority columns and module summaries.
+- Add module extraction helper for monorepo-aware impact reports.
+- Add module-based grouping and sort-by-risk in the ranked candidate table.
+
+## 0.2.6
+
+- Fix agent detection in postinstall for codex and claude.
+- Add npm version badge and one-liner install command to README.
+- Simplify install documentation with npm-first approach.
+
+## 0.2.5
+
+- Add `postinstall` auto-install script for `npm install -g`.
+- Add `legacy-impact-audit` CLI with `install`, `update`, `version`, `help` commands.
+- Add `.npmignore` to exclude build artifacts from published package.
+
 ## 0.2.4
 
 - Fix Windows subprocess decoding by forcing UTF-8 replacement decoding for `rg` and Git command output.

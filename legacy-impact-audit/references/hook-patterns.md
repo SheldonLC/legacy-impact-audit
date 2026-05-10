@@ -9,7 +9,8 @@ Hooks should enforce the impact funnel's gates and produce small artifacts. Do n
 Use this by default. Before changing a risky Java method, the agent runs:
 
 ```bash
-python3 "${CODEX_HOME:-$HOME/.codex}/skills/legacy-impact-audit/scripts/impact_audit.py" scan \
+skill_home="${LEGACY_IMPACT_AUDIT_HOME:-${CODEX_HOME:-$HOME/.codex}/skills/legacy-impact-audit}"
+python3 "$skill_home/scripts/impact_audit.py" scan \
   --root . \
   --symbol METHOD_NAME \
   --owner-class OWNER_CLASS \
@@ -23,62 +24,15 @@ The agent then reads `.ai/legacy-impact-audit/llm-packet.md` and performs semant
 
 Use this when the repo often receives Java changes without impact notes. The hook should fail only when watched source/config files changed and no fresh passing `.ai/legacy-impact-audit/impact-scan.json` exists.
 
-Example `.git/hooks/pre-commit`:
+**Global hook** (recommended): `legacy-impact-audit hooks install` sets up a shared hook via `git config --global core.hooksPath`. The hook searches known skill locations and only gates repos that already have audit artifacts.
 
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-python3 "${CODEX_HOME:-$HOME/.codex}/skills/legacy-impact-audit/scripts/validate_impact_audit.py" \
-  --root . \
-  --mode staged \
-  --max-age-minutes 240
-```
+**Per-project hook**: Run `legacy-impact-audit install --project . --hooks` to generate a hook with the installed path baked in.
 
 For repositories where semantic confirmation must be captured before review, add `--require-verdicts` and write `.ai/legacy-impact-audit/semantic-verdict.md` during the review/test-planning step.
 
-### Local sensitive-scan mode
-
-Use this when local commits and pushes must be blocked if staged files, commit messages, or pushed commits contain private terms, local paths, or internal project identifiers.
-
-Keep the pattern file local and untracked. Recommended location:
-
-```text
-.git/hooks/legacy-impact-audit-sensitive-patterns.txt
-```
-
-Example `.git/hooks/pre-commit`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-root="$(git rev-parse --show-toplevel)"
-exec "$root/legacy-impact-audit/scripts/sensitive-scan-gate.sh" pre-commit "$@"
-```
-
-Example `.git/hooks/commit-msg`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-root="$(git rev-parse --show-toplevel)"
-exec "$root/legacy-impact-audit/scripts/sensitive-scan-gate.sh" commit-msg "$@"
-```
-
-Example `.git/hooks/pre-push`:
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-root="$(git rev-parse --show-toplevel)"
-exec "$root/legacy-impact-audit/scripts/sensitive-scan-gate.sh" pre-push "$@"
-```
-
-The hook prints only matched locations by default, not matched line contents. Set `LEGACY_IMPACT_AUDIT_SHOW_SENSITIVE_LINES=1` locally when exact matched lines are needed.
-
 ### Target-file mode
 
-Use this when teams want deterministic blocking on known risky methods. Keep `.ai/legacy-impact-audit/targets.json` in the repo:
+Use this when teams want determininistic blocking on known risky methods. Keep `.ai/legacy-impact-audit/targets.json` in the repo:
 
 ```json
 {

@@ -116,29 +116,30 @@ make_instruction_block() {
 $MARKER_START
 ## Legacy Impact Audit
 
-Before planning or implementing risky legacy Java changes, run a legacy impact audit.
+### When to Run
+Run ONLY when making code changes: implementing, fixing, refactoring, modifying
+behavior, changing method signatures, DTO/table/query shapes, or public APIs.
+Do NOT trigger on: querying, debugging (read-only), investigating, explaining.
 
-Mandatory triggers:
-- service methods, public APIs, shared utilities, job entry points, workflow logic
-- DAO/query/persistence behavior, DTO/table/JSON contracts
-- financial calculation, scoring, approval, reconciliation, workflow, or other core business logic
+### Plan-First Gate
+Before ANY code change: plan â†?review â†?confirm â†?audit â†?implement.
+Use plan/brainstorm/ask-me/grill to validate the approach first.
 
-Gate rules:
-- Run impact audit before finalizing the implementation plan.
-- Run it again after code changes and before functional test case design or code review.
-- Do not proceed if the audit returns \`REFINE_REQUIRED\`; narrow by owner class, package, module, or definition file first.
-- Do not ask an LLM to analyze broad raw search results; use the generated audit report and packet.
-- Test scope and regression scope must be derived from confirmed \`real_dependency\` and \`possible_dependency\` candidates.
+### Mandatory Triggers
+service methods, public APIs, shared utilities, job entry points, workflow
+logic, DAO/query/persistence, DTO/table/JSON, financial calculation, scoring,
+approval, reconciliation, core business logic.
 
-Command pattern:
+### Gate Rules
+- Do not proceed if audit returns \`REFINE_REQUIRED\`.
+- Do not feed raw search results to LLM; use the generated report.
+- Test/regression scope from \`real_dependency\` and \`possible_dependency\`.
 
+### Command
 \`\`\`bash
 python3 "$script_path" scan \\
-  --root . \\
-  --symbol METHOD_NAME \\
-  --owner-class OWNER_CLASS \\
-  --owner-package OWNER_PACKAGE \\
-  --definition-file path/to/OwnerClass.java
+  --root . --symbol METHOD_NAME --owner-class OWNER_CLASS \\
+  --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java
 \`\`\`
 $MARKER_END
 EOF
@@ -219,27 +220,26 @@ project_parent() {
   esac
 }
 
+# Per-agent instruction file (written in project scope)
+instruction_file() {
+  agent="$1"
+  case "$agent" in
+    codex)    printf '%s\n' "AGENTS.md" ;;
+    opencode) printf '%s\n' "AGENTS.md" ;;
+    claude)   printf '%s\n' "CLAUDE.md" ;;
+    gemini)   printf '%s\n' "GEMINI.md" ;;
+    copilot)  printf '%s\n' ".github/copilot-instructions.md" ;;
+    deepcode) printf '%s\n' ".deepcode/instructions.md" ;;
+    *) return 1 ;;
+  esac
+}
+
 install_agent() {
   agent="$1"
 
   if [ "$agent" = "codex" ] && [ -n "$skills_dir" ]; then
     installed=$(copy_skill "$source_dir" "$skills_dir")
     echo "Installed/updated: $installed"
-    return
-  fi
-
-  if [ "$agent" = "gemini" ]; then
-    if [ "$scope" = "user" ]; then
-      installed=$(copy_skill "$source_dir" "$home_dir/.agents/skills")
-      append_marked_block "$home_dir/.gemini/GEMINI.md" "$installed/scripts/impact_audit.py"
-      echo "Installed/updated: $installed"
-      echo "Installed/updated: $home_dir/.gemini/GEMINI.md"
-    else
-      installed=$(copy_skill "$source_dir" "$project_root/.ai/legacy-impact-audit/skills")
-      append_marked_block "$project_root/GEMINI.md" "$installed/scripts/impact_audit.py"
-      echo "Installed/updated: $installed"
-      echo "Installed/updated: $project_root/GEMINI.md"
-    fi
     return
   fi
 
@@ -260,12 +260,47 @@ install_agent() {
   installed=$(copy_skill "$source_dir" "$parent")
   echo "Installed/updated: $installed"
 
-  if [ "$agent" = "opencode" ]; then
-    append_marked_block "$project_root/AGENTS.md" "$installed/scripts/impact_audit.py"
-    echo "Installed/updated: $project_root/AGENTS.md"
-  elif [ "$agent" = "copilot" ]; then
-    append_marked_block "$project_root/.github/copilot-instructions.md" "$installed/scripts/impact_audit.py"
-    echo "Installed/updated: $project_root/.github/copilot-instructions.md"
+  # Write the agent's instruction file (AGENTS.md, CLAUDE.md, etc.)
+  file=$(instruction_file "$agent") || return
+  append_marked_block "$project_root/$file" "$installed/scripts/impact_audit.py"
+  echo "Installed/updated: $project_root/$file"
+}
+
+install_agent() {
+  agent="$1"
+
+  # User scope: copy skill only
+  if [ "$scope" = "user" ]; then
+    parent=$(user_parent "$agent") || {
+      echo "User-scope install is not defined for $agent" >&2
+      exit 1
+    }
+    installed=$(copy_skill "$source_dir" "$parent")
+    echo "Installed/updated: $installed"
+    return
+  fi
+
+  # Project scope: copy skill + write instruction file
+  parent=$(project_parent "$agent") || {
+    echo "Project-scope install is not defined for $agent" >&2
+    exit 1
+  }
+  installed=$(copy_skill "$source_dir" "$parent")
+  echo "Installed/updated: $installed"
+
+  # Per-agent instruction file mapping
+  case "$agent" in
+    opencode|codex) instruction_file="AGENTS.md" ;;
+    claude)         instruction_file="CLAUDE.md" ;;
+    gemini)         instruction_file="GEMINI.md" ;;
+    copilot)        instruction_file=".github/copilot-instructions.md" ;;
+    deepcode)       instruction_file=".deepcode/instructions.md" ;;
+    *)              instruction_file="" ;;
+  esac
+
+  if [ -n "$instruction_file" ]; then
+    append_marked_block "$project_root/$instruction_file" "$installed/scripts/impact_audit.py"
+    echo "Installed/updated: $project_root/$instruction_file"
   fi
 }
 
