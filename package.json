@@ -1,0 +1,57 @@
+{
+  "name": "legacy-impact-audit",
+  "version": "0.2.4",
+  "description": "Low-token impact audit for legacy Java repositories. Install as an OpenCode, Codex, or Claude Code skill.",
+  "keywords": [
+    "opencode",
+    "codex",
+    "claude",
+    "legacy",
+    "java",
+    "impact-analysis",
+    "skill"
+  ],
+  "homepage": "https://github.com/SheldonLC/legacy-impact-audit",
+  "license": "MIT",
+  "author": {
+    "name": "SheldonLC"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SheldonLC/legacy-impact-audit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SheldonLC/legacy-impact-audit/issues"
+  },
+  "bin": {
+    "legacy-impact-audit": "./bin/legacy-impact-audit.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "files": [
+    "bin/",
+    "install.js",
+    "legacy-impact-audit/",
+    "portable/",
+    "docs/",
+    "examples/",
+    "CHANGELOG.md",
+    "NO-PYTHON-INSTALL.md",
+    "AGENT-INSTALL.md",
+    "VERSION",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

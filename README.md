@@ -60,13 +60,26 @@ VERSION
 
 Python is not required for installation. It is required later to run the deterministic audit scripts.
 
-Install for Codex, the default target, with the Python installer:
+### npm (recommended)
+
+```bash
+npm install -g legacy-impact-audit
+legacy-impact-audit install            # auto-detect agent (opencode, codex, or claude)
+legacy-impact-audit install --agent opencode  # explicit agent
+legacy-impact-audit install --project .      # project scope
+legacy-impact-audit update                   # re-install to latest
+legacy-impact-audit version                  # show version
+```
+
+Requires Node.js 18+. This copies the skill files to the correct agent skill directory.
+
+### Python installer
 
 ```bash
 python3 portable/install-kit.py --agent codex --scope user --force
 ```
 
-Or install without Python:
+### No-Python installers
 
 ```bash
 sh portable/install-kit.sh --agent codex --scope user --force
@@ -74,12 +87,6 @@ sh portable/install-kit.sh --agent codex --scope user --force
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File portable/install-kit.ps1 -Agent codex -Scope user -Force
-```
-
-This installs the skill to:
-
-```text
-${CODEX_HOME:-$HOME/.codex}/skills/legacy-impact-audit
 ```
 
 Install for every supported user-level agent target:
