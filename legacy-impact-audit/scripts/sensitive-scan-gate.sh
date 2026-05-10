@@ -108,6 +108,19 @@ scan_commit_messages() {
   scan_text_file "$label" "$file"
 }
 
+scan_commit_range() {
+  range="$1"
+  label="$2"
+  scan_commit_messages "$range" "commits:$label"
+
+  while IFS= read -r commit; do
+    [ -n "$commit" ] || continue
+    while IFS= read -r -d '' path; do
+      scan_tree_file "$commit" "$path"
+    done < <(git diff-tree --root --no-commit-id --name-only --diff-filter=ACMRT -r -z "$commit")
+  done < <(git rev-list "$range")
+}
+
 run_pre_commit() {
   cd "$repo_root"
   while IFS= read -r -d '' path; do
@@ -134,15 +147,9 @@ run_pre_push() {
     fi
 
     if [ "$remote_oid" = "$zero_oid" ]; then
-      while IFS= read -r -d '' path; do
-        scan_tree_file "$local_oid" "$path"
-      done < <(git ls-tree -r -z --name-only "$local_oid")
-      scan_commit_messages "$local_oid" "commits:$local_ref"
+      scan_commit_range "$local_oid" "$local_ref"
     else
-      while IFS= read -r -d '' path; do
-        scan_tree_file "$local_oid" "$path"
-      done < <(git diff --name-only --diff-filter=ACMRT -z "$remote_oid..$local_oid")
-      scan_commit_messages "$remote_oid..$local_oid" "commits:$local_ref"
+      scan_commit_range "$remote_oid..$local_oid" "$local_ref"
     fi
   done
 }
