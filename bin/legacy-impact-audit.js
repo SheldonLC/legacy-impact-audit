@@ -197,6 +197,8 @@ Do NOT trigger on: querying, debugging (without code changes), investigating, ex
 Before ANY code change: plan → audit → review → confirm → implement.
 Use plan/brainstorm/ask-me/grill to validate the approach first.
 Run the impact audit BEFORE review — audit findings may change the plan.
+This gate is MANDATORY. You cannot skip it. You cannot rationalize a bypass.
+Adding a method, changing a signature, modifying any file = MUST RUN.
 Do not touch code until the plan is confirmed.
 
 ### Mandatory Triggers
@@ -285,14 +287,22 @@ function instructionBlock(scriptPath) {
 ${MARKER_START}
 ## Legacy Impact Audit
 
-### When to Run (trigger scope)
+### When to Run (MANDATORY — DO NOT BYPASS)
 
-Run the impact audit ONLY when making code changes: implementing, fixing,
-refactoring, modifying behavior, changing method signatures, DTO/table/query
-shapes, or public APIs.
+Run the impact audit for ANY code change. No exceptions:
+- Adding/modifying methods, classes, fields, constructors
+- Changing signatures, return types, parameters, visibility
+- Modifying DTOs, entities, DAOs, queries, table schemas
+- Any file write, edit, or creation in the codebase
 
-Do NOT trigger on: querying, debugging (read-only), investigating, explaining,
-case checking, or any task that does not produce a code diff.
+The ONLY operations that skip the audit:
+- Pure read: querying, searching, reading files, explaining
+- Debugging without code changes, investigating, answering questions
+
+IMPORTANT: If you find yourself thinking "this is just a small change" or
+"this doesn't need an audit" — STOP. You are rationalizing a bypass.
+Run the audit anyway. Adding an overloaded method IS a public API change.
+Even adding a comment requires you to consider downstream impact.
 
 ### Plan-First Gate
 

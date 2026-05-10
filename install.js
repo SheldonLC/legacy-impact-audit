@@ -41,11 +41,11 @@ const USER_TARGETS = [
 //   hook:        install a coding-agent hook (post-tool-edit audit reminder)
 //
 //   Hook types:
-//     "opencode-plugin" â†?copies audit-reminder.js to plugins/ directory
-//     false             â†?no hook available (relies on instruction block)
+//     "opencode-plugin" ï¿½?copies audit-reminder.js to plugins/ directory
+//     false             ï¿½?no hook available (relies on instruction block)
 //
-//   TODO: codex  â†?"codex-hook" (format TBD)
-//   TODO: copilot â†?"copilot-hook" (format TBD)
+//   TODO: codex  ï¿½?"codex-hook" (format TBD)
+//   TODO: copilot ï¿½?"copilot-hook" (format TBD)
 const AGENT_CAPABILITIES = {
   opencode: { instruction: true, skill: true, hook: "opencode-plugin" },
   codex:    { instruction: true, skill: true, hook: "codex-session-hook" },
@@ -191,7 +191,7 @@ function main() {
   });
 
   if (found.length === 0) {
-    // No known agent found â€?try default (opencode)
+    // No known agent found ï¿½?try default (opencode)
     const target = USER_TARGETS.find(t => t.name === "opencode");
     if (target) {
       fs.mkdirSync(path.dirname(target.skillDir), { recursive: true });
@@ -251,14 +251,16 @@ function writeAgentHook(target) {
 <!-- legacy-impact-audit:start -->
 ## Legacy Impact Audit
 
-### When to Run
-Run ONLY when making code changes: implementing, fixing, refactoring, modifying
-behavior, changing method signatures, DTO/table/query shapes, or public APIs.
-Do NOT trigger on: querying, debugging (read-only), investigating, explaining.
+### When to Run (MANDATORY â€” DO NOT BYPASS)
+Run for ANY code change. No exceptions. Adding/modifying methods, classes,
+fields, constructors, signatures, DTOs, entities, DAOs, queries, schemas,
+any file write/edit/create = MUST RUN.The ONLY skip: pure read (query, search, read, explain), debug without changes.
+If you think "this doesn't need an audit" â€” STOP. Run it anyway.
 
 ### Plan-First Gate
-Before ANY code change: plan â†?review â†?confirm â†?audit â†?implement.
-Use plan/brainstorm/ask-me/grill to validate the approach first.
+Before ANY code change: plan â†’ audit â†’ review â†’ confirm â†’ implement.
+Use plan/brainstorm/ask-me/grill to validate first. MANDATORY.
+Run audit BEFORE review â€” findings may change the plan.
 
 ### Mandatory Triggers
 service methods, public APIs, shared utilities, job entry points, workflow

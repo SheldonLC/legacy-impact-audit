@@ -9,19 +9,21 @@ description: Low-token impact audit for legacy Java or mixed enterprise reposito
 
 Run a cheap-to-expensive impact funnel before editing risky legacy code. Prefer deterministic search and ranking first; call the LLM only on a small candidate packet.
 
-## Trigger Scope
+## Trigger Scope (MANDATORY — DO NOT BYPASS)
 
-This skill fires ONLY during code-change workflows:
-- Implementing, fixing, refactoring, modifying behavior
-- Changing method signatures, DTO/table/query shapes, or public APIs
+This skill fires for ANY code change. No exceptions. Adding/modifying methods,
+classes, fields, constructors, signatures, DTOs, entities, DAOs, queries,
+schemas, any file write/edit/create = MUST RUN.
 
-It does NOT fire on read-only operations: querying, debugging (without code changes), investigating, explaining, case checking.
+The ONLY skip: pure read (query, search, read, explain), debug without changes.
+If the agent rationalizes "this doesn't need an audit" — overrule and run it.
 
-## Plan-First Gate
+## Plan-First Gate (MANDATORY)
 
-Before any code change: plan �?review �?confirm �?audit �?implement.
+Before any code change: plan → audit → review → confirm → implement.
 Use plan / brainstorm / ask-me / grill skills to validate the approach.
-Do not touch code until the plan is confirmed.
+THIS GATE IS MANDATORY. DO NOT SKIP. DO NOT RATIONALIZE A BYPASS.
+Run audit BEFORE review — findings may change the plan.
 
 ## Required Workflow
 
@@ -141,7 +143,7 @@ Every impact analysis should include:
 
 - Target method/class/package and intended change.
 - Raw match count, filtered match count, candidate file count, and gate status.
-- **Blast Radius** tree diagram grouping candidates by module with risk indicators (🔴 HIGH, 🟡 MEDIUM, �?LOW).
+- **Blast Radius** tree diagram grouping candidates by module with risk indicators (🔴 HIGH, 🟡 MEDIUM, �?LOW).
 - **Module Summary** table showing affected modules, file counts, and risk distribution.
 - Top candidate table with score, priority, risk emoji, module, file, line numbers, and reasons.
 - LLM semantic verdicts: `real_dependency`, `possible_dependency`, `not_dependency`, or `needs_manual_check`.

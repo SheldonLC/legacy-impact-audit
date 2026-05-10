@@ -62,14 +62,17 @@ def instruction_block(script_path: str) -> str:
 {MARKER_START}
 ## Legacy Impact Audit
 
-### When to Run
-Run ONLY when making code changes: implementing, fixing, refactoring, modifying
-behavior, changing method signatures, DTO/table/query shapes, or public APIs.
-Do NOT trigger on: querying, debugging (read-only), investigating, explaining.
+### When to Run (MANDATORY — DO NOT BYPASS)
+Run for ANY code change. No exceptions. Adding/modifying methods, classes,
+fields, constructors, signatures, DTOs, entities, DAOs, queries, schemas,
+any file write/edit/create = MUST RUN.
+The ONLY skip: pure read (query, search, read, explain), debug without changes.
+If you think "this doesn't need an audit" — STOP. Run it anyway.
 
 ### Plan-First Gate
 Before ANY code change: plan -> audit -> review -> confirm -> implement.
-Use plan/brainstorm/ask-me/grill to validate the approach first.
+Use plan/brainstorm/ask-me/grill to validate first. MANDATORY.
+Run audit BEFORE review — findings may change the plan.
 
 ### Mandatory Triggers
 service methods, public APIs, shared utilities, job entry points, workflow

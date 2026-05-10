@@ -91,20 +91,28 @@ function New-InstructionBlock {
 $MarkerStart
 ## Legacy Impact Audit
 
-### When to Run (trigger scope)
+### When to Run (MANDATORY - DO NOT BYPASS)
 
-Run the impact audit ONLY when making code changes: implementing, fixing,
-refactoring, modifying behavior, changing method signatures, DTO/table/query
-shapes, or public APIs.
+Run the impact audit for ANY code change. No exceptions:
+- Adding/modifying methods, classes, fields, constructors
+- Changing signatures, return types, parameters, visibility
+- Modifying DTOs, entities, DAOs, queries, table schemas
+- Any file write, edit, or creation in the codebase
 
-Do NOT trigger on: querying, debugging (read-only), investigating, explaining,
-case checking, or any task that does not produce a code diff.
+The ONLY operations that skip the audit:
+- Pure read: querying, searching, reading files, explaining
+- Debugging without code changes, investigating, answering questions
+
+IMPORTANT: If you find yourself thinking "this is just a small change" or
+"this doesn't need an audit" — STOP. Adding an overload IS a public API
+change. Run the audit anyway.
 
 ### Plan-First Gate
 
 Before ANY code change: plan -> audit -> review -> confirm -> implement.
 Use plan / brainstorm / ask-me / grill skills to validate the approach.
-Do not touch code until the plan is confirmed.
+THIS GATE IS MANDATORY. DO NOT SKIP. DO NOT RATIONALIZE A BYPASS.
+Run the audit BEFORE review — findings may change the plan.
 
 ### Mandatory Triggers
 

@@ -24,13 +24,14 @@ def main():
     skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     context = f"""\
-## Legacy Impact Audit (mandatory)
+## Legacy Impact Audit (MANDATORY — DO NOT BYPASS)
 
-You have legacy-impact-audit installed. Before changing any of the following, run an impact audit first:
+You MUST run an impact audit for ANY code change. No exceptions.
+Adding a method, changing a signature, modifying ANY file = MUST RUN.
 
-- service methods, public APIs, shared utilities, job entry points, workflow logic
-- DAO/query/persistence behavior, DTO/table/JSON contracts
-- financial calculation, scoring, approval, reconciliation, or core business logic
+The ONLY skip: pure read (query, search, explain), debug without changes.
+If you think "this doesn't need an audit" — STOP. Run it anyway.
+Adding an overloaded method IS a public API change.
 
 Run: python3 "{skill_dir}/scripts/impact_audit.py" scan \\
   --root . \\
