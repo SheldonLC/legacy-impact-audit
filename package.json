@@ -1,6 +1,6 @@
 {
   "name": "legacy-impact-audit",
-  "version": "0.2.21",
+  "version": "0.2.22",
   "description": "🔍 Blast radius & caller analysis for legacy Java. Heuristic-ranked impact audit — npm-installable agent skill for OpenCode, Codex, Claude Code, Copilot, Gemini & DeepCode.",
   "keywords": [
     "legacy-impact-audit",

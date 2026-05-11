@@ -280,12 +280,24 @@ function installCodexSessionHook() {
   fs.writeFileSync(hookConfig, JSON.stringify(hooksConfig, null, 2), "utf-8");
   console.log(`[legacy-impact-audit] Hook (codex-session): ${hookConfig}`);
 
-  // Enable hooks feature
+  // Enable hooks feature and migrate deprecated codex_hooks.
   let toml = fs.existsSync(configToml) ? fs.readFileSync(configToml, "utf-8") : "";
-  if (!toml.includes("hooks = true")) {
+  let changed = false;
+  if (/^\s*codex_hooks\s*=\s*true\s*$/m.test(toml)) {
+    toml = toml.replace(/^\s*codex_hooks\s*=\s*true\s*$/m, "hooks = true");
+    changed = true;
+  }
+  if (/^\s*codex_hooks\s*=\s*false\s*$/m.test(toml)) {
+    toml = toml.replace(/^\s*codex_hooks\s*=\s*false\s*$/m, "hooks = true");
+    changed = true;
+  }
+  if (!/^\s*hooks\s*=\s*true\s*$/m.test(toml)) {
     toml = toml.includes("[features]")
       ? toml.replace("[features]", "[features]\nhooks = true")
       : toml.trimEnd() + "\n\n[features]\nhooks = true\n";
+    changed = true;
+  }
+  if (changed) {
     fs.writeFileSync(configToml, toml, "utf-8");
     console.log(`[legacy-impact-audit]   Enabled hooks in config.toml`);
   }

@@ -395,8 +395,23 @@ function ensureCodexHooksEnabled(codexDir) {
   const configPath = path.join(codexDir, "config.toml");
   let config = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf-8") : "";
 
+  let changed = false;
+  if (/^\s*codex_hooks\s*=\s*true\s*$/m.test(config)) {
+    config = config.replace(/^\s*codex_hooks\s*=\s*true\s*$/m, "hooks = true");
+    changed = true;
+  }
+  if (/^\s*codex_hooks\s*=\s*false\s*$/m.test(config)) {
+    config = config.replace(/^\s*codex_hooks\s*=\s*false\s*$/m, "hooks = true");
+    changed = true;
+  }
+
   // Check if hooks feature is already enabled
-  if (/hooks\s*=\s*true/.test(config)) return;
+  if (/^\s*hooks\s*=\s*true\s*$/m.test(config)) {
+    if (changed) {
+      fs.writeFileSync(configPath, config, "utf-8");
+    }
+    return;
+  }
 
   // Add [features] section with hooks = true
   if (config.includes("[features]")) {
@@ -404,7 +419,10 @@ function ensureCodexHooksEnabled(codexDir) {
   } else {
     config += "\n[features]\nhooks = true\n";
   }
+  changed = true;
+  if (changed) {
   fs.writeFileSync(configPath, config, "utf-8");
+  }
 }
 
 main();

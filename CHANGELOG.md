@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.22
+
+- Migrate deprecated Codex `codex_hooks = true` config to `hooks = true` during install.
+- Keep Codex hook installation compatible with newer Codex feature naming.
+
 ## 0.2.21
 
 - Exclude `portable/__pycache__` and `.pyc` files from the npm package.
