@@ -10,7 +10,7 @@
 npm install -g legacy-impact-audit
 ```
 
-Current version: `0.2.22`
+Current version: `0.2.23`
 
 It is designed for repositories where full dependency graphs are unavailable, stale, too expensive to build, or unreliable for daily change work.
 

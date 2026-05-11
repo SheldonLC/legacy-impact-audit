@@ -14,11 +14,15 @@ import os
 
 
 def main():
+    # SessionStart payloads are optional for this hook. We do not need any
+    # fields from stdin to produce the reminder context, so empty or invalid
+    # stdin should not block the Codex session.
     try:
-        payload = json.loads(sys.stdin.read())
+        raw = sys.stdin.read()
+        if raw.strip():
+            json.loads(raw)
     except (json.JSONDecodeError, OSError):
-        print(json.dumps({"decision": "block", "reason": "Failed to read hook input"}))
-        return 1
+        pass
 
     # Find the skill directory (relative to this script's location)
     skill_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

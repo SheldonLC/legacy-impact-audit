@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.23
+
+- Make the Codex SessionStart hook tolerant of empty or invalid stdin payloads.
+- Prevent SessionStart hook failures from blocking Codex startup when the hook input is absent.
+
 ## 0.2.22
 
 - Migrate deprecated Codex `codex_hooks = true` config to `hooks = true` during install.
