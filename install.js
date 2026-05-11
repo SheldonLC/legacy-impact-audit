@@ -48,7 +48,7 @@ const USER_TARGETS = [
 //   TODO: copilot �?"copilot-hook" (format TBD)
 const AGENT_CAPABILITIES = {
   opencode: { instruction: true, skill: true, hook: "opencode-plugin" },
-  codex:    { instruction: true, skill: true, hook: "codex-session-hook" },
+  codex:    { instruction: true, skill: true, hook: false },
   claude:   { instruction: true, skill: true, hook: false },
   copilot:  { instruction: true, skill: true, hook: false },
   gemini:   { instruction: true, skill: true, hook: false },
@@ -89,10 +89,6 @@ function auditCommand(scriptPath) {
 
 function preferredPythonCommand() {
   return isWindows() ? "python" : "python3";
-}
-
-function sessionHookCommand(scriptPath) {
-  return `${preferredPythonCommand()} "${scriptPath.replace(/\\/g, "/")}"`;
 }
 
 function isNpmGlobal() {
@@ -193,6 +189,36 @@ function writeMarkedBlock(filePath, block) {
   fs.writeFileSync(filePath, content, "utf-8");
 }
 
+function removeCodexSessionHook(target) {
+  const hookConfig = path.join(target.checkDir, "hooks.json");
+  if (!fs.existsSync(hookConfig)) {
+    return;
+  }
+  let hooksConfig = {};
+  try {
+    hooksConfig = JSON.parse(fs.readFileSync(hookConfig, "utf-8"));
+  } catch (_) {
+    return;
+  }
+  const hooks = hooksConfig.hooks || {};
+  const sessionStart = hooks.SessionStart || [];
+  const filtered = sessionStart.filter((entry) => {
+    const hookList = entry.hooks || [];
+    return !hookList.some((hook) => String(hook.command || "").includes("legacy-impact-audit"));
+  });
+  if (filtered.length === sessionStart.length) {
+    return;
+  }
+  if (filtered.length > 0) {
+    hooks.SessionStart = filtered;
+  } else {
+    delete hooks.SessionStart;
+  }
+  hooksConfig.hooks = hooks;
+  fs.writeFileSync(hookConfig, JSON.stringify(hooksConfig, null, 2), "utf-8");
+  console.log(`[legacy-impact-audit] Removed Codex SessionStart hook from: ${hookConfig}`);
+}
+
 function main() {
   // Only auto-install during global install, not local project install
   if (!IS_NPM_GLOBAL) {
@@ -239,8 +265,9 @@ function main() {
       writeAgentHook(target);
     }
 
-    // 3. Install coding-agent hook (post-tool-edit audit reminder)
-    if (caps.hook) {
+    if (target.name === "codex") {
+      removeCodexSessionHook(target);
+    } else if (caps.hook) {
       installAgentHook(target, caps.hook);
     }
   }
@@ -329,9 +356,6 @@ function installAgentHook(target, hookType) {
     case "opencode-plugin":
       installOpenCodePlugin(target);
       break;
-    case "codex-session-hook":
-      installCodexSessionHook(target);
-      break;
     // TODO: case "copilot-hook": installCopilotHook(target); break;
   }
 }
@@ -345,84 +369,6 @@ function installOpenCodePlugin(target) {
   fs.mkdirSync(pluginDir, { recursive: true });
   fs.copyFileSync(pluginSrc, pluginDest);
   console.log(`[legacy-impact-audit]   Hook (opencode-plugin): ${pluginDest}`);
-}
-
-function installCodexSessionHook(target) {
-  // Write ~/.codex/hooks.json with SessionStart hook that injects audit context
-  const hooksJsonPath = path.join(target.checkDir, "hooks.json");
-  const hookScriptPath = path.join(target.skillDir, "scripts", "codex-session-start-hook.py")
-    .replace(/\\/g, "/");
-
-  const hooksConfig = {
-    hooks: {
-      SessionStart: [
-        {
-          matcher: "startup|resume",
-          hooks: [
-            {
-              type: "command",
-              command: sessionHookCommand(hookScriptPath),
-              timeout: 5,
-            },
-          ],
-        },
-      ],
-    },
-  };
-
-  // Merge with existing hooks.json if present
-  let existing = {};
-  if (fs.existsSync(hooksJsonPath)) {
-    try { existing = JSON.parse(fs.readFileSync(hooksJsonPath, "utf-8")); } catch (_) {}
-  }
-
-  // Deep merge: add our SessionStart without overwriting other events
-  if (!existing.hooks) existing.hooks = {};
-  existing.hooks.SessionStart = [
-    ...(existing.hooks.SessionStart || []),
-    ...hooksConfig.hooks.SessionStart,
-  ];
-
-  fs.mkdirSync(path.dirname(hooksJsonPath), { recursive: true });
-  fs.writeFileSync(hooksJsonPath, JSON.stringify(existing, null, 2), "utf-8");
-  console.log(`[legacy-impact-audit]   Hook (codex-session-hook): ${hooksJsonPath}`);
-
-  // Ensure hooks is enabled in config.toml (idempotent)
-  ensureCodexHooksEnabled(target.checkDir);
-}
-
-function ensureCodexHooksEnabled(codexDir) {
-  const configPath = path.join(codexDir, "config.toml");
-  let config = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf-8") : "";
-
-  let changed = false;
-  if (/^\s*codex_hooks\s*=\s*true\s*$/m.test(config)) {
-    config = config.replace(/^\s*codex_hooks\s*=\s*true\s*$/m, "hooks = true");
-    changed = true;
-  }
-  if (/^\s*codex_hooks\s*=\s*false\s*$/m.test(config)) {
-    config = config.replace(/^\s*codex_hooks\s*=\s*false\s*$/m, "hooks = true");
-    changed = true;
-  }
-
-  // Check if hooks feature is already enabled
-  if (/^\s*hooks\s*=\s*true\s*$/m.test(config)) {
-    if (changed) {
-      fs.writeFileSync(configPath, config, "utf-8");
-    }
-    return;
-  }
-
-  // Add [features] section with hooks = true
-  if (config.includes("[features]")) {
-    config = config.replace(/\[features\]/, "[features]\nhooks = true");
-  } else {
-    config += "\n[features]\nhooks = true\n";
-  }
-  changed = true;
-  if (changed) {
-  fs.writeFileSync(configPath, config, "utf-8");
-  }
 }
 
 main();

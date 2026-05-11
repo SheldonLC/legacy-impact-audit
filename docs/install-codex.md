@@ -2,6 +2,8 @@
 
 Codex uses this repository as a native skill.
 
+Codex does not require a `SessionStart` hook. Codex uses `~/.codex/AGENTS.md` plus the installed skill directory.
+
 ## User Install
 
 ```bash
@@ -45,3 +47,5 @@ python3 "${CODEX_HOME:-$HOME/.codex}/skills/.system/skill-creator/scripts/quick_
 ```text
 Use $legacy-impact-audit to audit the impact of changing METHOD_NAME before editing.
 ```
+
+Any hook guidance elsewhere in this repository refers to optional Git hooks / CI gates, not a Codex startup hook.

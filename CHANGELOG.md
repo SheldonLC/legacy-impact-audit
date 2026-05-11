@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.25
+
+- Stop installing Codex `SessionStart` hooks; Codex now relies on `~/.codex/AGENTS.md` like the other agents.
+- Remove previously installed `legacy-impact-audit` SessionStart entries from `hooks.json` during Codex install.
+
+## 0.2.24
+
+- Route Codex SessionStart hooks through `.sh` / `.cmd` wrappers instead of calling Python directly.
+- Guarantee valid JSON fallback output from the SessionStart hook even when Python is missing or hook execution fails.
+- Add a static fallback reminder so hook degradation is visible to the model instead of silently disappearing.
+
 ## 0.2.23
 
 - Make the Codex SessionStart hook tolerant of empty or invalid stdin payloads.

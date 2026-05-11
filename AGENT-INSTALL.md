@@ -23,6 +23,8 @@ Supported install targets:
 - GitHub Copilot
 - Deep Code
 
+For Codex, installation means the skill directory plus `~/.codex/AGENTS.md`. This kit does not require a Codex startup hook.
+
 ## Prerequisites
 
 - Installation: Python is optional. Use `portable/install-kit.py`, `portable/install-kit.sh`, `portable/install-kit.ps1`, or manual copy.
@@ -149,6 +151,8 @@ Read these outputs:
 The agent should only call the LLM after reading `llm-packet.md`. Do not ask the LLM to analyze raw `rg` results.
 
 ## Validate Gate Artifacts
+
+This section is about repository Git hooks or CI validation, not a Codex startup hook.
 
 Use this in hooks or CI after an audit has been generated:
 

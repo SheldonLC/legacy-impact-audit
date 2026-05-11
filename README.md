@@ -10,7 +10,7 @@
 npm install -g legacy-impact-audit
 ```
 
-Current version: `0.2.23`
+Current version: `0.2.25`
 
 It is designed for repositories where full dependency graphs are unavailable, stale, too expensive to build, or unreliable for daily change work.
 
@@ -73,6 +73,8 @@ npm install -g legacy-impact-audit
 The postinstall script auto-detects your agent (OpenCode, Codex, or Claude Code) and installs the skill. Done.
 
 Prerequisites: `python` (or `python3`) and `ripgrep` (`rg`) must be available in PATH.
+
+For Codex specifically, this kit now relies on `~/.codex/AGENTS.md` plus the installed skill directory. It does not require a Codex `SessionStart` hook.
 
 ### Project scope
 
@@ -171,6 +173,8 @@ For local-only sensitive term blocking, use `legacy-impact-audit/scripts/sensiti
 Use [docs/workflow-test-guide.md](docs/workflow-test-guide.md) and [examples/workflow-test-prompt.md](examples/workflow-test-prompt.md) to validate the full workflow with another AI agent. The mock project lives in [examples/mock-legacy-java](examples/mock-legacy-java).
 
 ## Validate In Hooks Or CI
+
+These hook references are Git hooks / CI gates for repositories. They are not a Codex startup hook.
 
 ```bash
 python3 "$HOME/.codex/skills/legacy-impact-audit/scripts/validate_impact_audit.py" \

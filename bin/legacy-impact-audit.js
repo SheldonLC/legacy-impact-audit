@@ -56,7 +56,7 @@ const AGENTS_MD_TARGETS = {
 //               false = no hook available (relies on instruction block)
 const AGENT_CAPABILITIES = {
   opencode: { instruction: true, skill: true, hook: "opencode-plugin" },
-  codex:    { instruction: true, skill: true, hook: "codex-session-hook" },
+  codex:    { instruction: true, skill: true, hook: false },
   claude:   { instruction: true, skill: true, hook: false },
   copilot:  { instruction: true, skill: true, hook: false },
   gemini:   { instruction: true, skill: true, hook: false },
@@ -79,10 +79,6 @@ function detectAgent() {
 
 function preferredPythonCommand() {
   return process.platform === "win32" ? "python" : "python3";
-}
-
-function sessionHookCommand(scriptPath) {
-  return `${preferredPythonCommand()} "${scriptPath.replace(/\\/g, "/")}"`;
 }
 
 function copySkill(src, dest, force) {
@@ -238,9 +234,6 @@ function installAgentHook(agent, hookType) {
     case "opencode-plugin":
       installOpenCodePlugin();
       break;
-    case "codex-session-hook":
-      installCodexSessionHook();
-      break;
     case "copilot-repo-hook":
       // Copilot hooks are per-repo only — handled in project scope install
       break;
@@ -257,51 +250,38 @@ function installOpenCodePlugin() {
   console.log(`[legacy-impact-audit] Hook (opencode-plugin): ${pluginDest}`);
 }
 
-function installCodexSessionHook() {
-  const codexDir = process.env.CODEX_HOME || path.join(osHome(), ".codex");
-  const skillDir = path.join(codexDir, "skills", SKILL_NAME);
-  const hookScript = path.join(skillDir, "scripts", "codex-session-start-hook.py");
+function removeCodexSessionHook(codexDir) {
   const hookConfig = path.join(codexDir, "hooks.json");
-  const configToml = path.join(codexDir, "config.toml");
-
-  // Register SessionStart hook
+  if (!fs.existsSync(hookConfig)) {
+    return;
+  }
   let hooksConfig = {};
-  if (fs.existsSync(hookConfig)) {
-    try { hooksConfig = JSON.parse(fs.readFileSync(hookConfig, "utf-8")); } catch (_) {}
+  try {
+    hooksConfig = JSON.parse(fs.readFileSync(hookConfig, "utf-8"));
+  } catch (_) {
+    return;
   }
   const hooks = hooksConfig.hooks || {};
-  hooks.SessionStart = [
-    {
-      matcher: "startup",
-      hooks: [{ type: "command", command: sessionHookCommand(hookScript), timeout: 10 }],
-    },
-  ];
-  hooksConfig.hooks = { ...hooksConfig.hooks, ...hooks };
+  const sessionStart = hooks.SessionStart || [];
+  const filtered = sessionStart.filter((entry) => {
+    const hookList = entry.hooks || [];
+    return !hookList.some((hook) => String(hook.command || "").includes("legacy-impact-audit"));
+  });
+  if (filtered.length === sessionStart.length) {
+    return;
+  }
+  if (filtered.length > 0) {
+    hooks.SessionStart = filtered;
+  } else {
+    delete hooks.SessionStart;
+  }
+  hooksConfig.hooks = hooks;
   fs.writeFileSync(hookConfig, JSON.stringify(hooksConfig, null, 2), "utf-8");
-  console.log(`[legacy-impact-audit] Hook (codex-session): ${hookConfig}`);
-
-  // Enable hooks feature and migrate deprecated codex_hooks.
-  let toml = fs.existsSync(configToml) ? fs.readFileSync(configToml, "utf-8") : "";
-  let changed = false;
-  if (/^\s*codex_hooks\s*=\s*true\s*$/m.test(toml)) {
-    toml = toml.replace(/^\s*codex_hooks\s*=\s*true\s*$/m, "hooks = true");
-    changed = true;
-  }
-  if (/^\s*codex_hooks\s*=\s*false\s*$/m.test(toml)) {
-    toml = toml.replace(/^\s*codex_hooks\s*=\s*false\s*$/m, "hooks = true");
-    changed = true;
-  }
-  if (!/^\s*hooks\s*=\s*true\s*$/m.test(toml)) {
-    toml = toml.includes("[features]")
-      ? toml.replace("[features]", "[features]\nhooks = true")
-      : toml.trimEnd() + "\n\n[features]\nhooks = true\n";
-    changed = true;
-  }
-  if (changed) {
-    fs.writeFileSync(configToml, toml, "utf-8");
-    console.log(`[legacy-impact-audit]   Enabled hooks in config.toml`);
-  }
+  console.log(`[legacy-impact-audit] Removed Codex SessionStart hook from: ${hookConfig}`);
 }
+
+// NOTE: auto_review is the safety permission gate, not PR code review.
+// It doesn't save costs to disable it — leave it on for safety.
 
 function instructionBlock(scriptPath) {
   const py = process.platform === "win32" ? "python" : "python3";
@@ -419,7 +399,9 @@ function cmdInstall(args) {
     if (caps.instruction) {
       writeAgentConfigHook(agent, targetDir);
     }
-    if (caps.hook) {
+    if (agent === "codex") {
+      removeCodexSessionHook(process.env.CODEX_HOME || path.join(osHome(), ".codex"));
+    } else if (caps.hook) {
       installAgentHook(agent, caps.hook);
     }
   } else if (scope === "project") {
