@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.21
+
+- Exclude `portable/__pycache__` and `.pyc` files from the npm package.
+- Keep the published tarball free of local Python cache artifacts.
+
 ## 0.2.20
 
 - Fix npm CLI and postinstall Gemini skill paths to match the documented `.agents` and `.ai/legacy-impact-audit` layout.
