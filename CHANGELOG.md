@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.20
+
+- Fix npm CLI and postinstall Gemini skill paths to match the documented `.agents` and `.ai/legacy-impact-audit` layout.
+- Remove duplicate project hook installation in the npm CLI.
+- Make npm-generated Codex/session hook commands and install instructions use OS-aware Python command selection.
+- Remove duplicate Codex session hook implementation from `install.js`.
+- Fix stale README version display.
+
 ## 0.2.8
 
 - Add copilot, deepcode, and gemini agent targets to npm install CLI and postinstall.

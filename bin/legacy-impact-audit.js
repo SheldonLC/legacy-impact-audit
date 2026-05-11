@@ -30,7 +30,7 @@ const USER_SKILL_DIRS = {
   claude: path.join(osHome(), ".claude", "skills"),
   copilot: path.join(osHome(), ".copilot", "skills"),
   deepcode: path.join(osHome(), ".agents", "skills"),
-  gemini: path.join(osHome(), ".gemini", "skills"),
+  gemini: path.join(osHome(), ".agents", "skills"),
 };
 
 // Project scope directories
@@ -39,7 +39,7 @@ const PROJECT_SKILL_DIRS = {
   claude: ".claude/skills",
   copilot: path.join(".github", "skills"),
   deepcode: path.join(".deepcode", "skills"),
-  gemini: path.join(".gemini", "skills"),
+  gemini: path.join(".ai", "legacy-impact-audit", "skills"),
 };
 
 const AGENTS_MD_TARGETS = {
@@ -75,6 +75,14 @@ function detectAgent() {
   if (fs.existsSync(path.join(osHome(), ".gemini"))) return "gemini";
   if (fs.existsSync(path.join(osHome(), ".agents"))) return "deepcode";
   return "opencode"; // default
+}
+
+function preferredPythonCommand() {
+  return process.platform === "win32" ? "python" : "python3";
+}
+
+function sessionHookCommand(scriptPath) {
+  return `${preferredPythonCommand()} "${scriptPath.replace(/\\/g, "/")}"`;
 }
 
 function copySkill(src, dest, force) {
@@ -128,8 +136,8 @@ function installHook(projectRoot, installedSkillDir) {
 set -euo pipefail
 # Installed by legacy-impact-audit — validates impact audit artifacts exist before commit.
 VALIDATOR="${validatorPath}"
+PYTHON="$(command -v python3 || command -v python || echo '')"
 if [ -f "$VALIDATOR" ]; then
-  PYTHON="$(command -v python3 || command -v python || echo '')"
   if [ -n "$PYTHON" ]; then
     "$PYTHON" "$VALIDATOR" --root . --mode staged --max-age-minutes ${maxAge}
     exit $?
@@ -144,7 +152,7 @@ if [ ! -f "$REPORT" ]; then
   exit 1
 fi
 NOW="$(date +%s)"
-MTIME="$(python3 -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$REPORT" 2>/dev/null ||
+MTIME="$([ -n "$PYTHON" ] && "$PYTHON" -c 'import os,sys; print(int(os.path.getmtime(sys.argv[1])))' "$REPORT" 2>/dev/null ||
   stat -c %Y "$REPORT" 2>/dev/null || stat -f %m "$REPORT" 2>/dev/null || echo 0)"
 if [ "$MTIME" -eq 0 ]; then
   echo "Could not determine impact report age. Re-run legacy-impact-audit." >&2
@@ -180,7 +188,7 @@ function writeAgentConfigHook(agent, installedSkillDir) {
   if (!cfg) return;
   const targetFile = path.join(cfg.dir, cfg.file);
   const scriptPath = installedSkillDir.replace(/\\/g, "/");
-  const py = process.platform === "win32" ? "python" : "python3";
+  const py = preferredPythonCommand();
   const fence = process.platform === "win32" ? "powershell" : "bash";
   const cmd = `${py} "${scriptPath}/scripts/impact_audit.py" scan --root . --symbol METHOD_NAME --owner-class OWNER_CLASS --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java`;
   const block = `\
@@ -265,7 +273,7 @@ function installCodexSessionHook() {
   hooks.SessionStart = [
     {
       matcher: "startup",
-      hooks: [{ type: "command", command: `python3 "${hookScript.replace(/\\/g, '/')}"`, timeout: 10 }],
+      hooks: [{ type: "command", command: sessionHookCommand(hookScript), timeout: 10 }],
     },
   ];
   hooksConfig.hooks = { ...hooksConfig.hooks, ...hooks };
@@ -422,12 +430,6 @@ function cmdInstall(args) {
       writeMarkedBlock(agentsMd, instructionBlock(installedPath));
     }
 
-    // Install per-project git hook (opt-in)
-    if (installHooks) {
-      installHook(projectRoot, targetDir);
-    }
-
-    // Install git hook (opt-in)
     if (installHooks) {
       installHook(projectRoot, targetDir);
     }
@@ -494,7 +496,6 @@ function generateGlobalHook(hooksDir) {
     '  "$HOME/.codex/skills" \\',
     '  "$HOME/.claude/skills" \\',
     '  "$HOME/.copilot/skills" \\',
-    '  "$HOME/.gemini/skills" \\',
     '  "$HOME/.agents/skills"; do',
     '  if [ -f "$dir/legacy-impact-audit/scripts/validate_impact_audit.py" ]; then',
     '    VALIDATOR="$dir/legacy-impact-audit/scripts/validate_impact_audit.py"',

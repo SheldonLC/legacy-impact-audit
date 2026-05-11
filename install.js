@@ -31,7 +31,7 @@ const USER_TARGETS = [
   { name: "claude", checkDir: path.join(osHome(), ".claude"), skillDir: path.join(osHome(), ".claude", "skills", SKILL_NAME) },
   { name: "copilot", checkDir: path.join(osHome(), ".copilot"), skillDir: path.join(osHome(), ".copilot", "skills", SKILL_NAME) },
   { name: "deepcode", checkDir: path.join(osHome(), ".agents"), skillDir: path.join(osHome(), ".agents", "skills", SKILL_NAME) },
-  { name: "gemini", checkDir: path.join(osHome(), ".gemini"), skillDir: path.join(osHome(), ".gemini", "skills", SKILL_NAME) },
+  { name: "gemini", checkDir: path.join(osHome(), ".gemini"), skillDir: path.join(osHome(), ".agents", "skills", SKILL_NAME) },
 ];
 
 // ── Agent capabilities matrix ──
@@ -76,7 +76,7 @@ function isWindows() {
 }
 
 function auditCommand(scriptPath) {
-  const py = isWindows() ? "python" : "python3";
+  const py = preferredPythonCommand();
   const sep = isWindows() ? " \\\n  " : " \\\n  ";
   const pathSep = isWindows() ? "\\" : "/";
   const psPath = scriptPath.replace(/\//g, pathSep);
@@ -85,6 +85,14 @@ function auditCommand(scriptPath) {
     "--root . --symbol METHOD_NAME --owner-class OWNER_CLASS",
     "--owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java",
   ].join(sep);
+}
+
+function preferredPythonCommand() {
+  return isWindows() ? "python" : "python3";
+}
+
+function sessionHookCommand(scriptPath) {
+  return `${preferredPythonCommand()} "${scriptPath.replace(/\\/g, "/")}"`;
 }
 
 function isNpmGlobal() {
@@ -137,7 +145,8 @@ function detectAgent() {
 }
 
 function instructionBlock(scriptPath) {
-  const escaped = scriptPath.replace(/\\/g, "/");
+  const fence = isWindows() ? "powershell" : "bash";
+  const cmd = auditCommand(scriptPath);
   return `\
 ${MARKER_START}
 ## Legacy Impact Audit
@@ -158,10 +167,8 @@ Gate rules:
 
 Command pattern:
 
-\`\`\`bash
-python3 "${scriptPath}/scripts/impact_audit.py" scan \\
-  --root . --symbol METHOD_NAME --owner-class OWNER_CLASS \\
-  --owner-package OWNER_PACKAGE --definition-file path/to/OwnerClass.java
+\`\`\`${fence}
+${cmd}
 \`\`\`
 ${MARKER_END}`;
 }
@@ -262,8 +269,8 @@ function writeAgentHook(target) {
 
   // Skill path relative to the installed location
   const scriptPath = target.skillDir.replace(/\\/g, "/");
-const cmd = auditCommand(scriptPath);
-const fence = isWindows() ? "powershell" : "bash";
+  const cmd = auditCommand(scriptPath);
+  const fence = isWindows() ? "powershell" : "bash";
   const block = `\
 <!-- legacy-impact-audit:start -->
 ## Legacy Impact Audit
@@ -329,51 +336,6 @@ function installAgentHook(target, hookType) {
   }
 }
 
-function installCodexSessionHook(target) {
-  const hookScript = path.join(target.skillDir, "scripts", "codex-session-start-hook.py");
-  const hookConfig = path.join(target.checkDir, "hooks.json");
-  const configToml = path.join(target.checkDir, "config.toml");
-
-  // 1. Register the SessionStart hook in hooks.json
-  let hooksConfig = {};
-  if (fs.existsSync(hookConfig)) {
-    try { hooksConfig = JSON.parse(fs.readFileSync(hookConfig, "utf-8")); } catch (_) {}
-  }
-  const hooks = hooksConfig.hooks || {};
-  hooks.SessionStart = [
-    {
-      matcher: "startup",
-      hooks: [
-        {
-          type: "command",
-          command: `python3 "${hookScript.replace(/\\/g, '/')}"`,
-          timeout: 10,
-          statusMessage: "Running impact audit reminder...",
-        },
-      ],
-    },
-  ];
-  // Merge with existing config (preserve other events)
-  hooksConfig.hooks = { ...hooksConfig.hooks, ...hooks };
-  fs.writeFileSync(hookConfig, JSON.stringify(hooksConfig, null, 2), "utf-8");
-  console.log(`[legacy-impact-audit]   Hook (codex-session): ${hookConfig}`);
-
-  // 2. Enable hooks feature in config.toml
-  let toml = "";
-  if (fs.existsSync(configToml)) {
-    toml = fs.readFileSync(configToml, "utf-8");
-  }
-  if (!toml.includes("hooks = true")) {
-    if (toml.includes("[features]")) {
-      toml = toml.replace("[features]", "[features]\nhooks = true");
-    } else {
-      toml = toml.trimEnd() + "\n\n[features]\nhooks = true\n";
-    }
-    fs.writeFileSync(configToml, toml, "utf-8");
-    console.log(`[legacy-impact-audit]   Enabled hooks in ${configToml}`);
-  }
-}
-
 function installOpenCodePlugin(target) {
   const pluginSrc = path.join(SKILL_SOURCE, "opencode-hooks", "audit-reminder.js");
   const pluginDir = path.join(target.checkDir, "plugins");
@@ -399,7 +361,7 @@ function installCodexSessionHook(target) {
           hooks: [
             {
               type: "command",
-              command: `python3 "${hookScriptPath}"`,
+              command: sessionHookCommand(hookScriptPath),
               timeout: 5,
             },
           ],
